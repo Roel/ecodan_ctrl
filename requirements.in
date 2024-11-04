@@ -1,0 +1,6 @@
+quart
+quart-auth
+apscheduler
+aiosqlite
+hypercorn
+httpx
