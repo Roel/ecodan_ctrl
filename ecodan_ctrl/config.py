@@ -68,6 +68,8 @@ class Config:
         os.environ.get('HEATING_FADE_MIN_TEMP_FORCE_OFF'))
     HEATING_FADE_MIN_CLEARSKY_RATIO = float(
         os.environ.get('HEATING_FADE_MIN_CLEARSKY_RATIO'))
+    HEATING_FADE_MIN_NEXTDAY_TEMP = float(
+        os.environ.get('HEATING_FADE_MIN_NEXTDAY_TEMP'))
     HEATING_FADE_PERIOD_HOURS = int(
         os.environ.get('HEATING_FADE_PERIOD_HOURS'))
     HEATING_FADE_DURING = os.environ.get('HEATING_FADE_DURING')

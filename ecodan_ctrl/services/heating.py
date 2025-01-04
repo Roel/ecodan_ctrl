@@ -47,6 +47,7 @@ class HeatingService:
         self.fade_min_temp_night = self.app.config['HEATING_FADE_MIN_TEMP_NIGHT']
         self.fade_min_temp_force_off = self.app.config['HEATING_FADE_MIN_TEMP_FORCE_OFF']
         self.fade_min_clearsky_ratio = self.app.config['HEATING_FADE_MIN_CLEARSKY_RATIO']
+        self.fade_min_nextday_temp = self.app.config['HEATING_FADE_MIN_NEXTDAY_TEMP']
 
         self.fade_period = datetime.timedelta(
             hours=self.app.config['HEATING_FADE_PERIOD_HOURS'])
@@ -84,6 +85,9 @@ class HeatingService:
                 datetime.time(23, 59, 59))
         )
 
+        tomorrow_day_start = tomorrow_start.replace(hour=8)
+        tomorrow_day_end = tomorrow_start.replace(hour=20)
+
         night_start = pytz.timezone('Europe/Brussels').localize(
             datetime.datetime.combine(
                 datetime.date.today(),
@@ -96,10 +100,12 @@ class HeatingService:
                 datetime.time(8, 0, 0))
         )
 
-        production_bounds, night_temp, tomorrows_production, heatpump_setpoint = await asyncio.gather(
+        production_bounds, night_temp, tomorrow_day_temp, tomorrows_production, heatpump_setpoint = await asyncio.gather(
             self.app.clients.mme_soleil.get_production_bounds(),
             self.app.clients.mme_soleil.get_temperature_stats(
                 night_start, night_end),
+            self.app.clients.mme_soleil.get_temperature_stats(
+                tomorrow_day_start, tomorrow_day_end),
             self.app.clients.mme_soleil.get_production_weather(
                 tomorrow_start, tomorrow_end),
             self.app.clients.hab.get_setpoint()
@@ -137,18 +143,22 @@ class HeatingService:
                 f'Expected median night temperature of {round(night_temp.q50, 2)} is equal to or below '
                 f'threshold of {self.fade_min_temp_force_off}, keeping setpoint at {self.temp_day} '
                 f'tonight.')
-        elif night_temp.q50 <= self.fade_min_temp_night and tomorrows_production.ratio < self.fade_min_clearsky_ratio:
+        elif night_temp.q50 <= self.fade_min_temp_night \
+                and tomorrows_production.ratio < self.fade_min_clearsky_ratio \
+                and tomorrow_day_temp.q50 < self.fade_min_nextday_temp:
             self.app.log.debug(
                 f'Expected median night temperature of {round(night_temp.q50, 2)} is equal to or below '
                 f'threshold of {self.fade_min_temp_night} and tomorrow will not be sunny '
                 f'(clearsky ratio: {round(tomorrows_production.ratio, 2)} < {self.fade_min_clearsky_ratio})'
-                f', keeping setpoint at {self.temp_day} tonight.')
+                f' or warm ({round(tomorrow_day_temp.q50, 2)} >= {self.fade_min_nextday_temp}), '
+                f'keeping setpoint at {self.temp_day} tonight.')
         else:
             self.app.log.debug(
                 f'Expected median night temperature of {round(night_temp.q50, 2)} is above '
                 f'threshold of {self.fade_min_temp_night} or tomorrow will be sunny '
                 f'(clearsky ratio: {round(tomorrows_production.ratio, 2)} >= {self.fade_min_clearsky_ratio})'
-                f', heat drop will start at {heat_drop_start}.')
+                f' or warm ({round(tomorrow_day_temp.q50, 2)} >= {self.fade_min_nextday_temp}), '
+                f'heat drop will start at {heat_drop_start}.')
 
             datapoints.append(SetpointDto(
                 timestamp=heat_drop_start, setpoint=self.temp_day, setpoint_type=SetpointDto.SetpointType.DROP))
