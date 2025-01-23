@@ -139,27 +139,78 @@ class HeatingService:
             ))
 
         if night_temp.q50 <= self.fade_min_temp_force_off:
+            # too cold, don't drop
+            drop_night_temp = False
+
             self.app.log.debug(
                 f'Expected median night temperature of {round(night_temp.q50, 2)} is equal to or below '
-                f'threshold of {self.fade_min_temp_force_off}, keeping setpoint at {self.temp_day} '
-                f'tonight.')
-        elif night_temp.q50 <= self.fade_min_temp_night \
-                and tomorrows_production.ratio < self.fade_min_clearsky_ratio \
-                and tomorrow_day_temp.q50 < self.fade_min_nextday_temp:
-            self.app.log.debug(
-                f'Expected median night temperature of {round(night_temp.q50, 2)} is equal to or below '
-                f'threshold of {self.fade_min_temp_night} and tomorrow will not be sunny '
-                f'(clearsky ratio: {round(tomorrows_production.ratio, 2)} < {self.fade_min_clearsky_ratio})'
-                f' or warm ({round(tomorrow_day_temp.q50, 2)} >= {self.fade_min_nextday_temp}), '
-                f'keeping setpoint at {self.temp_day} tonight.')
+                f'threshold of {self.fade_min_temp_force_off}, '
+                f'forced to keep setpoint at {self.temp_day} tonight.')
+
+        elif night_temp.q50 <= self.fade_min_temp_night:
+            # between force on and force off
+
+            if tomorrows_production.ratio >= self.fade_min_clearsky_ratio:
+                # tomorrow sunny, drop
+                drop_night_temp = True
+
+                self.app.log.debug(
+                    f'Expected median night temperature of {round(night_temp.q50, 2)} is equal to or below '
+                    f'threshold of {self.fade_min_temp_night}, '
+                    f'but tomorrow will be sunny '
+                    f'(clearsky ratio: {round(tomorrows_production.ratio, 2)} >= {self.fade_min_clearsky_ratio}), '
+                    f'dropping setpoint to {self.temp_night} tonight.')
+
+            elif tomorrow_day_temp.q50 >= self.fade_min_nextday_temp:
+                # tomorrow warm, drop
+                drop_night_temp = True
+
+                self.app.log.debug(
+                    f'Expected median night temperature of {round(night_temp.q50, 2)} is equal to or below '
+                    f'threshold of {self.fade_min_temp_night}, '
+                    f'but tomorrow will be warm '
+                    f'({round(tomorrow_day_temp.q50, 2)} >= {self.fade_min_nextday_temp}), '
+                    f'dropping setpoint to {self.temp_night} tonight.')
+
+            else:
+                # tomorrow cold and cloudy, don't drop
+                drop_night_temp = False
+
+                self.app.log.debug(
+                    f'Expected median night temperature of {round(night_temp.q50, 2)} is equal to or below '
+                    f'threshold of {self.fade_min_temp_night}, '
+                    f'keeping setpoint at {self.temp_day} tonight.')
+
+        elif night_temp.q50 >= self.fade_min_nextday_temp:
+            # warm enough tonight
+
+            if tomorrow_day_temp.q50 <= self.fade_min_temp_night:
+                # tomorrow cold, don't drop
+                drop_night_temp = False
+
+                self.app.log.debug(
+                    f'Expected median night temperature of {round(night_temp.q50, 2)} is above '
+                    f'threshold of {self.fade_min_temp_night}, '
+                    f'but tomorrow will be cold '
+                    f'({round(tomorrow_day_temp.q50, 2)} <= {self.fade_min_temp_night}), '
+                    f'keeping setpoint at {self.temp_day} tonight.')
+            else:
+                # tomorrow warm, drop
+                drop_night_temp = True
+
+                self.app.log.debug(
+                    f'Expected median night temperature of {round(night_temp.q50, 2)} is above '
+                    f'threshold of {self.fade_min_temp_night}, '
+                    f'dropping setpoint to {self.temp_night} tonight.')
         else:
+            drop_night_temp = True
+
             self.app.log.debug(
                 f'Expected median night temperature of {round(night_temp.q50, 2)} is above '
-                f'threshold of {self.fade_min_temp_night} or tomorrow will be sunny '
-                f'(clearsky ratio: {round(tomorrows_production.ratio, 2)} >= {self.fade_min_clearsky_ratio})'
-                f' or warm ({round(tomorrow_day_temp.q50, 2)} >= {self.fade_min_nextday_temp}), '
-                f'heat drop will start at {heat_drop_start}.')
+                f'threshold of {self.fade_min_temp_night}, '
+                f'dropping setpoint to {self.temp_night} tonight.')
 
+        if drop_night_temp:
             datapoints.append(SetpointDto(
                 timestamp=heat_drop_start, setpoint=self.temp_day, setpoint_type=SetpointDto.SetpointType.DROP))
 
@@ -187,6 +238,7 @@ class HeatingService:
         current_setpoint = self.get_current_setpoint()
         if current_setpoint is None:
             self.app.log.debug('No heating setpoint in plan.')
+            await self.plan()
             return
 
         state_setpoint, heatpump_setpoint = await asyncio.gather(
