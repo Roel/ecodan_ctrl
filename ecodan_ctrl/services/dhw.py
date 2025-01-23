@@ -275,7 +275,7 @@ class DhwService:
                 self.dhw_temp_buffer_current = 0 + self.dhw_temp_base
                 return
 
-            if heatpump_status.heat_source != 'Heatpump':
+            if heatpump_status.heat_source != 'Heatpump' and heatpump_status.defrost_status == 'Normal':
                 # using booster, stop
                 self.app.log.debug(
                     f'Stopping DHW buffer mode: heatsource is {heatpump_status.heat_source}')
