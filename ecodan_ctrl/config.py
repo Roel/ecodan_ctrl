@@ -17,22 +17,31 @@
 import os
 
 
+def read_secret(variable_name):
+    if f'{variable_name}_FILE' in os.environ:
+        with open(os.environ.get(f'{variable_name}_FILE'), 'r') as secret_file:
+            secret = secret_file.read()
+    else:
+        secret = os.environ.get(variable_name, None)
+    return secret
+
+
 class Config:
     QUART_AUTH_MODE = 'bearer'
     QUART_AUTH_BASIC_USERNAME = 'admin'
-    QUART_AUTH_BASIC_PASSWORD = os.environ.get('API_ADMIN_PASS')
+    QUART_AUTH_BASIC_PASSWORD = read_secret('API_ADMIN_PASS')
 
     ECODAN_API_BASE_URL = os.environ.get('ECODAN_API_BASE_URL')
     ECODAN_API_USERNAME = os.environ.get('ECODAN_API_USERNAME')
-    ECODAN_API_PASSWORD = os.environ.get('ECODAN_API_PASSWORD')
+    ECODAN_API_PASSWORD = read_secret('ECODAN_API_PASSWORD')
 
     HAB_API_BASE_URL = os.environ.get('HAB_API_BASE_URL')
     HAB_API_USERNAME = os.environ.get('HAB_API_USERNAME')
-    HAB_API_PASSWORD = os.environ.get('HAB_API_PASSWORD')
+    HAB_API_PASSWORD = read_secret('HAB_API_PASSWORD')
 
     MME_SOLEIL_BASE_URL = os.environ.get('MME_SOLEIL_BASE_URL')
     MME_SOLEIL_USERNAME = os.environ.get('MME_SOLEIL_USERNAME')
-    MME_SOLEIL_PASSWORD = os.environ.get('MME_SOLEIL_PASSWORD')
+    MME_SOLEIL_PASSWORD = read_secret('MME_SOLEIL_PASSWORD')
 
     DHW_TEMP_OFF = float(os.environ.get('DHW_TEMP_OFF'))
     DHW_TEMP_BASE = float(os.environ.get('DHW_TEMP_BASE'))

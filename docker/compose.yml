@@ -1,0 +1,27 @@
+services:
+  ecodan_ctrl:
+    image: ecodan_ctrl:latest
+    build:
+      context: ..
+      dockerfile: docker/ecodan_ctrl/Dockerfile
+    env_file:
+      - ../environment.docker.env
+    secrets:
+      - api_admin_pass
+      - ecodan_api_password
+      - hab_api_password
+      - mme_soleil_password
+    volumes:
+      - ../data:/app/data
+    ports:
+      - 8003:8080
+
+secrets:
+  api_admin_pass:
+    file: ./secrets/API_ADMIN_PASS
+  ecodan_api_password:
+    file: ./secrets/ECODAN_API_PASSWORD
+  hab_api_password:
+    file: ./secrets/HAB_API_PASSWORD
+  mme_soleil_password:
+    file: ./secrets/MME_SOLEIL_PASSWORD

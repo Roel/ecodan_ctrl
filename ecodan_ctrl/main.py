@@ -35,6 +35,7 @@ from services.legionella import LegionellaService
 from services.controller import ControllerService
 
 from blueprints.grafana import grafana
+from blueprints.status import status
 
 
 class Clients:
@@ -134,6 +135,7 @@ async def startup():
     await app.services.heating.plan()
 
     app.register_blueprint(grafana, url_prefix='/grafana')
+    app.register_blueprint(status, url_prefix='/status')
 
 
 @app.after_serving
