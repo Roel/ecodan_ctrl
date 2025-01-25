@@ -316,14 +316,11 @@ class HeatingService:
             self.in_idle_state_since = None
 
     async def update_from_state(self):
-        state_setpoint, heatpump_setpoint = await asyncio.gather(
-            HeatingSetpoint.from_zone('zone1'),
-            self.app.clients.hab.get_setpoint()
-        )
+        heatpump_setpoint = await self.app.clients.hab.get_setpoint()
 
         self.app.log.debug(
             f'Setting heating state setpoint from heatpump state, to a value of {heatpump_setpoint.heating}.')
-        state_setpoint.setpoint = heatpump_setpoint.heating
+        state_setpoint = HeatingSetpoint('zone1', heatpump_setpoint.heating)
         await state_setpoint.save()
 
     def __scheduled_jobs(self):

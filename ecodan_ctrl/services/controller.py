@@ -58,7 +58,7 @@ class ControllerService:
         elif setpoint.dhw == self.dhw_temp_legionella:
             mode = DhwMode.RUNNING_LEGIONELLA if is_running_dhw else DhwMode.PENDING_LEGIONELLA
 
-        if current_operating_mode.mode == mode:
+        if current_operating_mode is not None and current_operating_mode.mode == mode:
             self.app.log.debug(
                 f'Operating mode was already set correctly to: {mode}')
             return
