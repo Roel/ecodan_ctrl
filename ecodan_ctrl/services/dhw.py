@@ -54,6 +54,8 @@ class DhwService:
         self.legionella_temp_min_start = self.app.config['DHW_TEMP_LEGIONELLA'] - \
             self.dhw_temp_drop_ecodan
 
+        self.force_legionella_min_temp = self.app.config['HEATING_FADE_MIN_NEXTDAY_TEMP']
+
         self.buffer_interval = 2
         self.buffer_power_stack = []
         self.buffer_power_stack_size = 8
@@ -243,6 +245,14 @@ class DhwService:
             DhwSchedule.from_mode('legionella')
         )
 
+        if next_legionella is not None:
+            next_legionella_outdoor_temp = await self.app.clients.mme_soleil.get_temperature_stats(
+                next_legionella.planned_start,
+                next_legionella.planned_start + datetime.timedelta(hours=2)
+            )
+        else:
+            next_legionella_outdoor_temp = None
+
         now = datetime.datetime.now(tz=pytz.timezone('Europe/Brussels'))
 
         if operating_mode.mode == DhwMode.RUNNING_NORMAL:
@@ -268,7 +278,11 @@ class DhwService:
         if operating_mode.mode == DhwMode.RUNNING_BUFFER:
             if (dhw_temp.value >= self.legionella_temp_min_start
                     and next_legionella is not None
-                    and next_legionella.planned_start <= now + self.runtime + (16 * self.min_interval)):
+                    and next_legionella_outdoor_temp is not None
+                and (
+                    next_legionella.planned_start <= now +
+                    self.runtime + (16 * self.min_interval)
+                    or next_legionella_outdoor_temp.q50 <= self.force_legionella_min_temp)):
                 self.app.log.debug(
                     f'Legionella cycle was planned soon at {next_legionella.planned_start}, starting already.')
                 await self.app.services.legionella.start(force_start=True)
