@@ -60,7 +60,9 @@ class MmeSoleilClient:
             'start': start,
             'end': end
         })
-        return TimePeriodStatsDto.from_json(r.json())
+
+        if r.status_code == httpx.codes.OK:
+            return TimePeriodStatsDto.from_json(r.json())
 
     async def get_production_weather(self, start, end):
         r = await self.client.get(f'{self.base_url}/production/weather', params={
