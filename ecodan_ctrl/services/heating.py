@@ -44,6 +44,11 @@ class HeatingService:
         self.temp_night = self.app.config['HEATING_TEMP_NIGHT']
         self.temp_day = self.app.config['HEATING_TEMP_DAY']
 
+        self.buffer_min_clearsky_ratio = self.app.config['HEATING_BUFFER_MIN_CLEARSKY_RATIO']
+        self.buffer_min_production_w = self.app.config['HEATING_BUFFER_MIN_PRODUCTION_W']
+        self.buffer_temp_added = self.app.config['HEATING_BUFFER_TEMP_ADDED']
+        self.buffer_max_temp_night = self.app.config['HEATING_BUFFER_MAX_TEMP_NIGHT']
+
         self.fade_min_temp_night = self.app.config['HEATING_FADE_MIN_TEMP_NIGHT']
         self.fade_min_temp_force_off = self.app.config['HEATING_FADE_MIN_TEMP_FORCE_OFF']
         self.fade_min_clearsky_ratio = self.app.config['HEATING_FADE_MIN_CLEARSKY_RATIO']
@@ -73,6 +78,18 @@ class HeatingService:
         self.__scheduled_jobs()
 
     async def plan(self):
+        today_start = pytz.timezone('Europe/Brussels').localize(
+            datetime.datetime.combine(
+                datetime.date.today(),
+                datetime.time(0, 0, 0))
+        )
+
+        today_end = pytz.timezone('Europe/Brussels').localize(
+            datetime.datetime.combine(
+                datetime.date.today(),
+                datetime.time(23, 59, 59))
+        )
+
         tomorrow_start = pytz.timezone('Europe/Brussels').localize(
             datetime.datetime.combine(
                 datetime.date.today() + datetime.timedelta(days=1),
@@ -100,7 +117,7 @@ class HeatingService:
                 datetime.time(8, 0, 0))
         )
 
-        production_bounds, night_temp, tomorrow_day_temp, tomorrows_production, heatpump_setpoint = await asyncio.gather(
+        production_bounds, night_temp, tomorrow_day_temp, tomorrows_production, todays_production, heatpump_setpoint = await asyncio.gather(
             self.app.clients.mme_soleil.get_production_bounds(),
             self.app.clients.mme_soleil.get_temperature_stats(
                 night_start, night_end),
@@ -108,6 +125,8 @@ class HeatingService:
                 tomorrow_day_start, tomorrow_day_end),
             self.app.clients.mme_soleil.get_production_weather(
                 tomorrow_start, tomorrow_end),
+            self.app.clients.mme_soleil.get_production_weather(
+                today_start, today_end),
             self.app.clients.hab.get_setpoint()
         )
 
@@ -221,6 +240,40 @@ class HeatingService:
                     setpoint_type=SetpointDto.SetpointType.DROP
                 ))
 
+        if todays_production.ratio >= self.buffer_min_clearsky_ratio and night_temp.q50 <= self.buffer_max_temp_night:
+            # enable heat buffer
+            self.app.log.debug(
+                f'Expected a sunny day today, and a cold night tonight, so enabling heat buffer mode.'
+            )
+
+            buffer_bounds = await self.app.clients.mme_soleil.get_production_bounds(
+                min_kw=self.buffer_min_production_w)
+
+            fade_offset = self.fade_period / 2
+            step_temp = self.buffer_temp_added / self.fade_steps
+            step_interval = self.fade_period / self.fade_steps
+
+            buffer_raise_start = buffer_bounds.start - fade_offset
+            buffer_drop_start = buffer_bounds.end - fade_offset
+
+            self.app.log.debug(
+                f'Buffering will occur between {buffer_raise_start} and {buffer_drop_start}.')
+
+            for i in range(self.fade_steps):
+                datapoints.append(SetpointDto(
+                    timestamp=buffer_raise_start + ((i+1) * step_interval),
+                    setpoint=self.temp_day + ((i+1) * step_temp),
+                    setpoint_type=SetpointDto.SetpointType.RAISE
+                ))
+
+            for i in range(self.fade_steps):
+                datapoints.append(SetpointDto(
+                    timestamp=buffer_drop_start + ((i+1) * step_interval),
+                    setpoint=self.temp_day + self.buffer_temp_added - ((i+1) * step_temp),
+                    setpoint_type=SetpointDto.SetpointType.DROP
+                ))
+
+        print(datapoints)
         self.heating_plan = datapoints
 
     def get_current_setpoint(self):

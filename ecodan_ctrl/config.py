@@ -71,6 +71,15 @@ class Config:
     HEATING_TEMP_NIGHT = float(os.environ.get('HEATING_TEMP_NIGHT'))
     HEATING_TEMP_DAY = float(os.environ.get('HEATING_TEMP_DAY'))
 
+    HEATING_BUFFER_MIN_CLEARSKY_RATIO = float(
+        os.environ.get('HEATING_BUFFER_MIN_CLEARSKY_RATIO'))
+    HEATING_BUFFER_MIN_PRODUCTION_W = float(
+        os.environ.get('HEATING_BUFFER_MIN_PRODUCTION_W'))
+    HEATING_BUFFER_TEMP_ADDED = float(
+        os.environ.get('HEATING_BUFFER_TEMP_ADD'))
+    HEATING_BUFFER_MAX_TEMP_NIGHT = float(
+        os.environ.get('HEATING_BUFFER_MAX_TEMP_NIGHT'))
+
     HEATING_FADE_MIN_TEMP_NIGHT = float(
         os.environ.get('HEATING_FADE_MIN_TEMP_NIGHT'))
     HEATING_FADE_MIN_TEMP_FORCE_OFF = float(
