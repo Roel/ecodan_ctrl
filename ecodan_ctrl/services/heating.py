@@ -240,6 +240,9 @@ class HeatingService:
                     setpoint_type=SetpointDto.SetpointType.DROP
                 ))
 
+        self.heating_plan = datapoints
+        return
+
         if todays_production.ratio >= self.buffer_min_clearsky_ratio and night_temp.q50 <= self.buffer_max_temp_night:
             # enable heat buffer
             self.app.log.debug(
@@ -274,7 +277,6 @@ class HeatingService:
                 ))
 
         print(datapoints)
-        self.heating_plan = datapoints
 
     def get_current_setpoint(self):
         heating_plan = sorted(self.heating_plan, key=lambda sp: sp.timestamp)
