@@ -74,7 +74,12 @@ class TimeRangeDto:
 
     @staticmethod
     def from_json(json):
-        return TimeRangeDto(
-            start=datetime.datetime.fromisoformat(json['start']),
-            end=datetime.datetime.fromisoformat(json['end'])
-        )
+        start = end = None
+
+        if json['start'] is not None:
+            start = datetime.datetime.fromisoformat(json['start'])
+
+        if json['end'] is not None:
+            end = datetime.datetime.fromisoformat(json['end'])
+
+        return TimeRangeDto(start, end)
