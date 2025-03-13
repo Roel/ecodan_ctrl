@@ -250,6 +250,12 @@ class HeatingService:
         buffer_bounds = await self.app.clients.mme_soleil.get_production_bounds(
             min_kw=self.buffer_min_production_w/1000)
 
+        # always drop buffer
+        if buffer_bounds is None or buffer_bounds.end is None:
+            buffer_drop_start = now
+        else:
+            buffer_drop_start = buffer_bounds.end - fade_offset
+
         if todays_production.ratio >= self.buffer_min_clearsky_ratio and night_temp.q50 <= self.buffer_max_temp_night:
 
             if buffer_bounds.start is not None \
@@ -263,7 +269,6 @@ class HeatingService:
                 )
 
                 buffer_raise_start = buffer_bounds.start - fade_offset
-                buffer_drop_start = buffer_bounds.end - fade_offset
 
                 self.app.log.debug(
                     f'Buffering will occur between {buffer_raise_start} and {buffer_drop_start}.')
@@ -274,10 +279,6 @@ class HeatingService:
                         setpoint=self.temp_day + ((i+1) * step_temp),
                         setpoint_type=SetpointDto.SetpointType.RAISE
                     ))
-
-        # always drop buffer
-        if buffer_bounds is None or buffer_bounds.end is None:
-            buffer_drop_start = now
 
         for i in range(self.fade_steps):
             datapoints.append(SetpointDto(
