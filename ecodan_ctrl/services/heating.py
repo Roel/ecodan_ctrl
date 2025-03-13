@@ -79,6 +79,8 @@ class HeatingService:
         self.__scheduled_jobs()
 
     async def plan(self):
+        now = datetime.datetime.now(tz=pytz.timezone('Europe/Brussels'))
+
         today_start = pytz.timezone('Europe/Brussels').localize(
             datetime.datetime.combine(
                 datetime.date.today(),
@@ -241,9 +243,14 @@ class HeatingService:
                     setpoint_type=SetpointDto.SetpointType.DROP
                 ))
 
+        fade_offset = self.fade_period / 2
+        step_temp = self.buffer_temp_added / self.fade_steps
+        step_interval = self.fade_period / self.fade_steps
+
+        buffer_bounds = await self.app.clients.mme_soleil.get_production_bounds(
+            min_kw=self.buffer_min_production_w/1000)
+
         if todays_production.ratio >= self.buffer_min_clearsky_ratio and night_temp.q50 <= self.buffer_max_temp_night:
-            buffer_bounds = await self.app.clients.mme_soleil.get_production_bounds(
-                min_kw=self.buffer_min_production_w/1000)
 
             if buffer_bounds.start is not None \
                     and buffer_bounds.end is not None \
@@ -254,10 +261,6 @@ class HeatingService:
                 self.app.log.debug(
                     f'Expect a sunny day today, and a cold night tonight, enabling heat buffer mode.'
                 )
-
-                fade_offset = self.fade_period / 2
-                step_temp = self.buffer_temp_added / self.fade_steps
-                step_interval = self.fade_period / self.fade_steps
 
                 buffer_raise_start = buffer_bounds.start - fade_offset
                 buffer_drop_start = buffer_bounds.end - fade_offset
@@ -272,13 +275,17 @@ class HeatingService:
                         setpoint_type=SetpointDto.SetpointType.RAISE
                     ))
 
-                for i in range(self.fade_steps):
-                    datapoints.append(SetpointDto(
-                        timestamp=buffer_drop_start + ((i+1) * step_interval),
-                        setpoint=self.temp_day +
-                        self.buffer_temp_added - ((i+1) * step_temp),
-                        setpoint_type=SetpointDto.SetpointType.DROP
-                    ))
+        # always drop buffer
+        if buffer_bounds is None or buffer_bounds.end is None:
+            buffer_drop_start = now
+
+        for i in range(self.fade_steps):
+            datapoints.append(SetpointDto(
+                timestamp=buffer_drop_start + ((i+1) * step_interval),
+                setpoint=self.temp_day +
+                self.buffer_temp_added - ((i+1) * step_temp),
+                setpoint_type=SetpointDto.SetpointType.DROP
+            ))
 
         self.heating_plan = datapoints
 
