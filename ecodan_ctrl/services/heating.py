@@ -30,6 +30,7 @@ class SetpointDto:
     class SetpointType(Enum):
         RAISE = 1
         DROP = 2
+        RAISE_BUFFER = 3
 
     timestamp: datetime.datetime
     setpoint: float
@@ -277,7 +278,7 @@ class HeatingService:
                     datapoints.append(SetpointDto(
                         timestamp=buffer_raise_start + ((i+1) * step_interval),
                         setpoint=self.temp_day + ((i+1) * step_temp),
-                        setpoint_type=SetpointDto.SetpointType.RAISE
+                        setpoint_type=SetpointDto.SetpointType.RAISE_BUFFER
                     ))
 
         for i in range(self.fade_steps):
@@ -319,11 +320,15 @@ class HeatingService:
             state_setpoint = HeatingSetpoint('zone1', heatpump_setpoint)
 
         if not state_setpoint.equals(current_setpoint.setpoint):
+            if current_setpoint.setpoint_type == SetpointDto.SetpointType.RAISE_BUFFER:
+                if not await self.can_start_buffer():
+                    return
+
             self.app.log.debug(
                 f'State setpoint of {state_setpoint.setpoint} differs from current target setpoint '
                 f'of {current_setpoint.setpoint}.')
 
-            if current_setpoint.setpoint_type == SetpointDto.SetpointType.RAISE:
+            if current_setpoint.setpoint_type in (SetpointDto.SetpointType.RAISE, SetpointDto.SetpointType.RAISE_BUFFER):
                 if current_setpoint.setpoint <= heatpump_setpoint:
                     self.app.log.debug(
                         'Not lowering setpoint during heat raise.')
@@ -381,6 +386,10 @@ class HeatingService:
         else:
             # not in idle state, reset
             self.in_idle_state_since = None
+
+    async def can_start_buffer(self):
+        current_net_power = await self.app.clients.hab.get_current_net_power()
+        return current_net_power.value < 0
 
     async def update_from_state(self):
         heatpump_setpoint = await self.app.clients.hab.get_setpoint()
