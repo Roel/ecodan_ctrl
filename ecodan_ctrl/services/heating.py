@@ -389,7 +389,7 @@ class HeatingService:
 
     async def can_start_buffer(self):
         current_net_power = await self.app.clients.hab.get_current_net_power()
-        return current_net_power.value < 0
+        return current_net_power.value < self.buffer_min_production_w * -0.5
 
     async def update_from_state(self):
         heatpump_setpoint = await self.app.clients.hab.get_setpoint()
