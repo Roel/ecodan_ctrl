@@ -243,7 +243,7 @@ class HeatingService:
                     setpoint_type=SetpointDto.SetpointType.DROP
                 ))
 
-        fade_offset = self.fade_period / 2
+        fade_offset = self.fade_period / 4
         step_temp = self.buffer_temp_added / self.fade_steps
         step_interval = self.fade_period / self.fade_steps
 
