@@ -389,6 +389,40 @@ class HeatingService:
             self.in_idle_state_since = None
 
     async def can_start_buffer(self):
+        today_start = pytz.timezone('Europe/Brussels').localize(
+            datetime.datetime.combine(
+                datetime.date.today(),
+                datetime.time(0, 0, 0))
+        )
+
+        today_end = pytz.timezone('Europe/Brussels').localize(
+            datetime.datetime.combine(
+                datetime.date.today(),
+                datetime.time(23, 59, 59))
+        )
+
+        night_start = pytz.timezone('Europe/Brussels').localize(
+            datetime.datetime.combine(
+                datetime.date.today(),
+                datetime.time(20, 0, 0))
+        )
+
+        night_end = pytz.timezone('Europe/Brussels').localize(
+            datetime.datetime.combine(
+                datetime.date.today() + datetime.timedelta(days=1),
+                datetime.time(8, 0, 0))
+        )
+
+        night_temp, todays_production = await asyncio.gather(
+            self.app.clients.mme_soleil.get_temperature_stats(
+                night_start, night_end),
+            self.app.clients.mme_soleil.get_production_weather(
+                today_start, today_end)
+        )
+
+        if todays_production.ratio < self.buffer_min_clearsky_ratio or night_temp.q50 > self.buffer_max_temp_night:
+            return False
+
         current_net_power, daily_production = await asyncio.gather(
             self.app.clients.hab.get_current_net_power(),
             self.app.clients.hab.get_daily_production()
