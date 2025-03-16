@@ -18,7 +18,7 @@ import datetime
 
 import httpx
 
-from dto.generic import TimePeriodStatsDto, TimeRangeDto, TimestampDto
+from dto.generic import TimeDataDto, TimePeriodStatsDto, TimeRangeDto, TimestampDto
 from dto.solar import SolarProductionDto
 
 
@@ -70,3 +70,9 @@ class MmeSoleilClient:
             'end': end
         })
         return SolarProductionDto.from_json(r.json())
+
+    async def get_daily_production(self, end_time):
+        r = await self.client.get(f'{self.base_url}/production/daily', params={
+            'end': end_time.strftime('%Y%m%dT%H:%M:%S')
+        })
+        return TimeDataDto.from_json(r.json())

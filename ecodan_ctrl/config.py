@@ -77,6 +77,8 @@ class Config:
         os.environ.get('HEATING_BUFFER_MIN_PRODUCTION_W'))
     HEATING_BUFFER_MIN_PRODUCTION_HOURS = float(
         os.environ.get('HEATING_BUFFER_MIN_PRODUCTION_HOURS'))
+    HEATING_BUFFER_MIN_PREDICTION_RATIO = float(
+        os.environ.get('HEATING_BUFFER_MIN_PREDICTION_RATIO'))
     HEATING_BUFFER_TEMP_ADDED = float(
         os.environ.get('HEATING_BUFFER_TEMP_ADDED'))
     HEATING_BUFFER_MAX_TEMP_NIGHT = float(

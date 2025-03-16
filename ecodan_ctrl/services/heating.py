@@ -48,6 +48,7 @@ class HeatingService:
         self.buffer_min_clearsky_ratio = self.app.config['HEATING_BUFFER_MIN_CLEARSKY_RATIO']
         self.buffer_min_production_w = self.app.config['HEATING_BUFFER_MIN_PRODUCTION_W']
         self.buffer_min_production_hours = self.app.config['HEATING_BUFFER_MIN_PRODUCTION_HOURS']
+        self.buffer_min_prediction_ratio = self.app.config['HEATING_BUFFER_MIN_PREDICTION_RATIO']
         self.buffer_temp_added = self.app.config['HEATING_BUFFER_TEMP_ADDED']
         self.buffer_max_temp_night = self.app.config['HEATING_BUFFER_MAX_TEMP_NIGHT']
 
@@ -388,7 +389,16 @@ class HeatingService:
             self.in_idle_state_since = None
 
     async def can_start_buffer(self):
-        current_net_power = await self.app.clients.hab.get_current_net_power()
+        current_net_power, daily_production = await asyncio.gather(
+            self.app.clients.hab.get_current_net_power(),
+            self.app.clients.hab.get_daily_production()
+        )
+
+        daily_prediction = await self.app.clients.mme_soleil.get_daily_production(end_time=daily_production.timestamp)
+
+        if daily_production/daily_prediction < self.buffer_min_prediction_ratio:
+            return False
+
         return current_net_power.value < self.buffer_min_production_w * -0.5
 
     async def update_from_state(self):

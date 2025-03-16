@@ -61,3 +61,7 @@ class HabClient:
     async def get_current_net_power(self):
         r = await self.client.get(f'{self.base_url}/power/net/current')
         return TimeDataDto.from_json(r.json())
+
+    async def get_daily_production(self):
+        r = await self.client.get(f'{self.base_url}/production/daily')
+        return TimeDataDto.from_json(r.json())
