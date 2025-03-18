@@ -430,7 +430,7 @@ class HeatingService:
 
         daily_prediction = await self.app.clients.mme_soleil.get_daily_production(end_time=daily_production.timestamp)
 
-        if daily_production/daily_prediction < self.buffer_min_prediction_ratio:
+        if daily_production.value/daily_prediction.value < self.buffer_min_prediction_ratio:
             return False
 
         return current_net_power.value < self.buffer_min_production_w * -0.5
