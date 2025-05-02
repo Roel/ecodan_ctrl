@@ -6,9 +6,9 @@
 #
 aiofiles==24.1.0
     # via quart
-aiosqlite==0.20.0
+aiosqlite==0.21.0
     # via -r requirements.in
-anyio==4.8.0
+anyio==4.9.0
     # via httpx
 apscheduler==3.11.0
     # via -r requirements.in
@@ -16,7 +16,7 @@ blinker==1.9.0
     # via
     #   flask
     #   quart
-certifi==2024.12.14
+certifi==2025.4.26
     # via
     #   httpcore
     #   httpx
@@ -31,16 +31,16 @@ exceptiongroup==1.2.2
     #   taskgroup
 flask==3.1.0
     # via quart
-h11==0.14.0
+h11==0.16.0
     # via
     #   httpcore
     #   hypercorn
     #   wsproto
-h2==4.1.0
+h2==4.2.0
     # via hypercorn
 hpack==4.1.0
     # via h2
-httpcore==1.0.7
+httpcore==1.0.9
     # via httpx
 httpx==0.28.1
     # via -r requirements.in
@@ -69,7 +69,7 @@ markupsafe==3.0.2
     #   werkzeug
 priority==2.0.0
     # via hypercorn
-pytz==2024.2
+pytz==2025.2
     # via -r requirements.in
 quart==0.20.0
     # via
@@ -83,13 +83,13 @@ taskgroup==0.2.2
     # via hypercorn
 tomli==2.2.1
     # via hypercorn
-typing-extensions==4.12.2
+typing-extensions==4.13.2
     # via
     #   aiosqlite
     #   anyio
     #   hypercorn
     #   taskgroup
-tzlocal==5.2
+tzlocal==5.3.1
     # via apscheduler
 werkzeug==3.1.3
     # via
