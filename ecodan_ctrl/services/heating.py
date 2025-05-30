@@ -120,7 +120,7 @@ class HeatingService:
                 tomorrow_start, tomorrow_end),
             self.app.clients.mme_soleil.get_temperature_stats(
                 tomorrow_plus1_start, tomorrow_plus1_end),
-            self.app.clients.hab.get_house_temp()
+            self.app.clients.hab.get_house_temperature()
         )
 
         outside_temp = (tomorrow_temp.q50 + tomorrow_plus1_temp.q50) / 2
