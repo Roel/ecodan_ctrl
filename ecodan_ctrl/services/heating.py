@@ -115,7 +115,7 @@ class HeatingService:
                 datetime.time(19, 59, 59))
         )
 
-        tomorrow_temp, tomorrow_plus1_temp, inside_temp = asyncio.gather(
+        tomorrow_temp, tomorrow_plus1_temp, inside_temp = await asyncio.gather(
             self.app.clients.mme_soleil.get_temperature_stats(
                 tomorrow_start, tomorrow_end),
             self.app.clients.mme_soleil.get_temperature_stats(
