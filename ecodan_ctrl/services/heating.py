@@ -57,6 +57,10 @@ class HeatingService:
         self.fade_min_clearsky_ratio = self.app.config['HEATING_FADE_MIN_CLEARSKY_RATIO']
         self.fade_min_nextday_temp = self.app.config['HEATING_FADE_MIN_NEXTDAY_TEMP']
 
+        self.summer_mode_min_outside = self.app.config['HEATING_SUMMER_MODE_MIN_OUTSIDE']
+        self.summer_mode_min_inside = self.app.config['HEATING_SUMMER_MODE_MIN_INSIDE']
+        self.summer_mode_temp = self.app.config['HEATING_SUMMER_MODE_TEMP']
+
         self.fade_period = datetime.timedelta(
             hours=self.app.config['HEATING_FADE_PERIOD_HOURS'])
         self.fade_steps = self.app.config['HEATING_FADE_STEPS']
@@ -80,8 +84,64 @@ class HeatingService:
 
         self.__scheduled_jobs()
 
+    async def plan_summer_mode(self):
+        today_start = pytz.timezone('Europe/Brussels').localize(
+            datetime.datetime.combine(
+                datetime.date.today(),
+                datetime.time(0, 0, 0))
+        )
+
+        tomorrow_start = pytz.timezone('Europe/Brussels').localize(
+            datetime.datetime.combine(
+                datetime.date.today() + datetime.timedelta(days=1),
+                datetime.time(10, 0, 0))
+        )
+
+        tomorrow_end = pytz.timezone('Europe/Brussels').localize(
+            datetime.datetime.combine(
+                datetime.date.today() + datetime.timedelta(days=1),
+                datetime.time(19, 59, 59))
+        )
+
+        tomorrow_plus1_start = pytz.timezone('Europe/Brussels').localize(
+            datetime.datetime.combine(
+                datetime.date.today() + datetime.timedelta(days=2),
+                datetime.time(10, 0, 0))
+        )
+
+        tomorrow_plus1_end = pytz.timezone('Europe/Brussels').localize(
+            datetime.datetime.combine(
+                datetime.date.today() + datetime.timedelta(days=2),
+                datetime.time(19, 59, 59))
+        )
+
+        tomorrow_temp, tomorrow_plus1_temp, inside_temp = asyncio.gather(
+            self.app.clients.mme_soleil.get_temperature_stats(
+                tomorrow_start, tomorrow_end),
+            self.app.clients.mme_soleil.get_temperature_stats(
+                tomorrow_plus1_start, tomorrow_plus1_end),
+            self.app.clients.hab.get_house_temp()
+        )
+
+        outside_temp = (tomorrow_temp.q50 + tomorrow_plus1_temp.q50) / 2
+        if outside_temp >= self.summer_mode_min_outside and inside_temp.q50 >= self.summer_mode_min_inside:
+            self.app.log.debug(
+                f'Average outside temp of {outside_temp} is greater than or equal to {self.summer_mode_min_outside} '
+                f'and internal temp of {inside_temp.q50} is greater than or equal to {self.summer_mode_min_inside}: '
+                f'enabling summer mode.')
+
+            # summer mode is on
+            return [SetpointDto(
+                timestamp=today_start, setpoint=self.summer_mode_temp,
+                setpoint_type=SetpointDto.SetpointType.DROP)]
+
     async def plan(self):
         now = datetime.datetime.now(tz=pytz.timezone('Europe/Brussels'))
+
+        summer_mode_schedule = await self.plan_summer_mode()
+        if summer_mode_schedule is not None:
+            self.heating_plan = summer_mode_schedule
+            return
 
         today_start = pytz.timezone('Europe/Brussels').localize(
             datetime.datetime.combine(

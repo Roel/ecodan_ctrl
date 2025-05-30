@@ -65,3 +65,15 @@ class HabClient:
     async def get_daily_production(self):
         r = await self.client.get(f'{self.base_url}/production/daily')
         return TimeDataDto.from_json(r.json())
+
+    async def get_house_temperature(self, start=None, end=None):
+        params = {}
+        if start is not None:
+            params['start'] = start
+        if end is not None:
+            params['end'] = end
+
+        r = await self.client.get(f'{self.base_url}/house/temp', params=params)
+
+        if r.status_code == httpx.codes.OK:
+            return TimePeriodStatsDto.from_json(r.json())

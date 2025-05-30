@@ -97,4 +97,10 @@ class Config:
     HEATING_FADE_DURING = os.environ.get('HEATING_FADE_DURING')
     HEATING_FADE_STEPS = int(os.environ.get('HEATING_FADE_STEPS'))
 
+    HEATING_SUMMER_MODE_MIN_OUTSIDE = int(
+        os.environ.get('HEATING_SUMMER_MODE_MIN_OUTSIDE'))
+    HEATING_SUMMER_MODE_MIN_INSIDE = int(
+        os.environ.get('HEATING_SUMMER_MODE_MIN_INSIDE'))
+    HEATING_SUMMER_MODE_TEMP = int(os.environ.get('HEATING_SUMMER_MODE_TEMP'))
+
     DATABASE_PATH = os.environ.get('SQLITE_DB_PATH')
