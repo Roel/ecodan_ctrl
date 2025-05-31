@@ -59,6 +59,7 @@ class HeatingService:
 
         self.summer_mode_min_outside = self.app.config['HEATING_SUMMER_MODE_MIN_OUTSIDE']
         self.summer_mode_min_inside = self.app.config['HEATING_SUMMER_MODE_MIN_INSIDE']
+        self.summer_mode_min_inside_force = self.app.config['HEATING_SUMMER_MODE_MIN_INSIDE_FORCE']
         self.summer_mode_temp = self.app.config['HEATING_SUMMER_MODE_TEMP']
 
         self.fade_period = datetime.timedelta(
@@ -123,14 +124,23 @@ class HeatingService:
             self.app.clients.hab.get_house_temperature()
         )
 
+        summer_mode = False
+
         outside_temp = (tomorrow_temp.q75 + tomorrow_plus1_temp.q75) / 2
-        if outside_temp >= self.summer_mode_min_outside and inside_temp.q50 >= self.summer_mode_min_inside:
+        if inside_temp.q50 >= self.summer_mode_min_inside_force:
+            self.app.log.debug(
+                f'Internal temp of {inside_temp.q50} is greater than or equal to {self.summer_mode_min_inside_force}: '
+                f'force enabling summer mode.')
+            summer_mode = True
+
+        elif outside_temp >= self.summer_mode_min_outside and inside_temp.q50 >= self.summer_mode_min_inside:
             self.app.log.debug(
                 f'Average outside temp of {outside_temp} is greater than or equal to {self.summer_mode_min_outside} '
                 f'and internal temp of {inside_temp.q50} is greater than or equal to {self.summer_mode_min_inside}: '
                 f'enabling summer mode.')
+            summer_mode = True
 
-            # summer mode is on
+        if summer_mode:
             return [SetpointDto(
                 timestamp=today_start, setpoint=self.summer_mode_temp,
                 setpoint_type=SetpointDto.SetpointType.DROP)]
