@@ -123,7 +123,7 @@ class HeatingService:
             self.app.clients.hab.get_house_temperature()
         )
 
-        outside_temp = (tomorrow_temp.q25 + tomorrow_plus1_temp.q25) / 2
+        outside_temp = (tomorrow_temp.q75 + tomorrow_plus1_temp.q75) / 2
         if outside_temp >= self.summer_mode_min_outside and inside_temp.q50 >= self.summer_mode_min_inside:
             self.app.log.debug(
                 f'Average outside temp of {outside_temp} is greater than or equal to {self.summer_mode_min_outside} '
