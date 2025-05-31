@@ -60,6 +60,8 @@ class HeatingService:
         self.summer_mode_min_outside = self.app.config['HEATING_SUMMER_MODE_MIN_OUTSIDE']
         self.summer_mode_min_inside = self.app.config['HEATING_SUMMER_MODE_MIN_INSIDE']
         self.summer_mode_min_inside_force = self.app.config['HEATING_SUMMER_MODE_MIN_INSIDE_FORCE']
+        self.summer_mode_max_outside_force_off = self.app.config[
+            'HEATING_SUMMER_MODE_MAX_OUTSIDE_FORCE_OFF']
         self.summer_mode_temp = self.app.config['HEATING_SUMMER_MODE_TEMP']
 
         self.fade_period = datetime.timedelta(
@@ -127,7 +129,13 @@ class HeatingService:
         summer_mode = False
 
         outside_temp = (tomorrow_temp.q75 + tomorrow_plus1_temp.q75) / 2
-        if inside_temp.q50 >= self.summer_mode_min_inside_force:
+        if outside_temp < self.summer_mode_max_outside_force_off:
+            self.app.log.debug(
+                f'Average outside temp of {outside_temp} is lower than {self.summer_mode_max_outside_force_off}: '
+                f'force disabling summer mode.')
+            summer_mode = False
+
+        elif inside_temp.q50 >= self.summer_mode_min_inside_force:
             self.app.log.debug(
                 f'Internal temp of {inside_temp.q50} is greater than or equal to {self.summer_mode_min_inside_force}: '
                 f'force enabling summer mode.')

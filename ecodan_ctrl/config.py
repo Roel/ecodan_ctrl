@@ -103,6 +103,8 @@ class Config:
         os.environ.get('HEATING_SUMMER_MODE_MIN_INSIDE'))
     HEATING_SUMMER_MODE_MIN_INSIDE_FORCE = float(
         os.environ.get('HEATING_SUMMER_MODE_MIN_INSIDE_FORCE'))
+    HEATING_SUMMER_MODE_MAX_OUTSIDE_FORCE_OFF = float(
+        os.environ.get('HEATING_SUMMER_MODE_MAX_OUTSIDE_FORCE_OFF'))
     HEATING_SUMMER_MODE_TEMP = float(os.environ.get('HEATING_SUMMER_MODE_TEMP'))
 
     DATABASE_PATH = os.environ.get('SQLITE_DB_PATH')
