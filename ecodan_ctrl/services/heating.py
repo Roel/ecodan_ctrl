@@ -134,6 +134,11 @@ class HeatingService:
             return [SetpointDto(
                 timestamp=today_start, setpoint=self.summer_mode_temp,
                 setpoint_type=SetpointDto.SetpointType.DROP)]
+        else:
+            self.app.log.debug(
+                f'Average outside temp of {outside_temp} lower than {self.summer_mode_min_outside} '
+                f'or internal temp of {inside_temp.q50} is lower than {self.summer_mode_min_inside}: '
+                f'not enabling summer mode.')
 
     async def plan(self):
         now = datetime.datetime.now(tz=pytz.timezone('Europe/Brussels'))
