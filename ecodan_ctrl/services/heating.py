@@ -141,10 +141,10 @@ class HeatingService:
                 f'force enabling summer mode.')
             summer_mode = True
 
-        elif outside_temp >= self.summer_mode_min_outside and inside_temp.q75 >= self.summer_mode_min_inside:
+        elif outside_temp >= self.summer_mode_min_outside or inside_temp.q75 >= self.summer_mode_min_inside:
             self.app.log.debug(
                 f'Average outside temp of {outside_temp} is greater than or equal to {self.summer_mode_min_outside} '
-                f'and internal temp of {inside_temp.q75} is greater than or equal to {self.summer_mode_min_inside}: '
+                f'or internal temp of {inside_temp.q75} is greater than or equal to {self.summer_mode_min_inside}: '
                 f'enabling summer mode.')
             summer_mode = True
 
