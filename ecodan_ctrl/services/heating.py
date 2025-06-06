@@ -152,14 +152,11 @@ class HeatingService:
             return [SetpointDto(
                 timestamp=today_start, setpoint=self.summer_mode_temp,
                 setpoint_type=SetpointDto.SetpointType.DROP)]
-        else:
-            self.app.log.debug(
-                f'Average outside temp of {outside_temp} lower than {self.summer_mode_min_outside} '
-                f'or internal temp of {inside_temp.q50} is lower than {self.summer_mode_min_inside}: '
-                f'not enabling summer mode.')
 
     async def plan(self):
         now = datetime.datetime.now(tz=pytz.timezone('Europe/Brussels'))
+
+        self.app.log.debug('Planning heating schedule.')
 
         summer_mode_schedule = await self.plan_summer_mode()
         if summer_mode_schedule is not None:
@@ -218,8 +215,6 @@ class HeatingService:
             self.app.clients.hab.get_setpoint()
         )
 
-        self.app.log.debug('Planning heating schedule.')
-
         self.app.log.debug(
             f'Production today will start at {production_bounds.start} and end at {production_bounds.end}.')
 
@@ -231,7 +226,9 @@ class HeatingService:
         step_temp = (self.temp_day - temp_night) / self.fade_steps
         step_interval = self.fade_period / self.fade_steps
 
-        datapoints = []
+        datapoints = [SetpointDto(
+            timestamp=today_start, setpoint=temp_night, setpoint_type=SetpointDto.SetpointType.DROP
+        )]
 
         self.app.log.debug(f'Heat buildup will start at {heat_raise_start}.')
 
