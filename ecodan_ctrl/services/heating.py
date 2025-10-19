@@ -109,7 +109,7 @@ class HeatingService:
         temp_stats = await asyncio.gather(
             *[get_temp_stats(i) for i in range(self.summer_mode_min_outside_days)]
         )
-        outside_temp = sum(i.q75 for i in temp_stats if i is not None)/len([i for i in temp_stats if i is not None])
+        outside_temp = sum(i.q50 for i in temp_stats if i is not None)/len([i for i in temp_stats if i is not None])
 
         inside_temp = await self.app.clients.hab.get_house_temperature()
 
@@ -127,16 +127,16 @@ class HeatingService:
                 f'force disabling summer mode.')
             summer_mode = False
 
-        elif inside_temp.q75 >= self.summer_mode_min_inside_force:
+        elif inside_temp.q50 >= self.summer_mode_min_inside_force:
             self.app.log.debug(
-                f'Internal temp of {inside_temp.q75} is greater than or equal to {self.summer_mode_min_inside_force}: '
+                f'Internal temp of {inside_temp.q50} is greater than or equal to {self.summer_mode_min_inside_force}: '
                 f'force enabling summer mode.')
             summer_mode = True
 
-        elif outside_temp >= self.summer_mode_min_outside or inside_temp.q75 >= self.summer_mode_min_inside:
+        elif outside_temp >= self.summer_mode_min_outside or inside_temp.q50 >= self.summer_mode_min_inside:
             self.app.log.debug(
                 f'Average outside temp of {outside_temp} is greater than or equal to {self.summer_mode_min_outside} '
-                f'or internal temp of {inside_temp.q75} is greater than or equal to {self.summer_mode_min_inside}: '
+                f'or internal temp of {inside_temp.q50} is greater than or equal to {self.summer_mode_min_inside}: '
                 f'enabling summer mode.')
             summer_mode = True
 
