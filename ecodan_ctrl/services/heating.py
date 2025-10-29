@@ -15,27 +15,13 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import asyncio
-from dataclasses import dataclass
 import datetime
-from enum import Enum
 
 import pytz
 
 from db.models.heating_setpoint import HeatingSetpoint
 from db.models.operating_mode import DhwMode, OperatingMode
-
-
-@dataclass
-class SetpointDto:
-    class SetpointType(Enum):
-        RAISE = 1
-        DROP = 2
-        RAISE_BUFFER = 3
-
-    timestamp: datetime.datetime
-    setpoint: float
-    setpoint_type: SetpointType
-
+from dto.heating import SetpointDto
 
 class HeatingService:
     def __init__(self, app):
