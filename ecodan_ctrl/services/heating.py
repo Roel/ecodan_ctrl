@@ -216,7 +216,7 @@ class HeatingService:
         for i in range(self.fade_steps):
             datapoints.append(SetpointDto(
                 timestamp=heat_raise_start + ((i+1) * step_interval),
-                setpoint=datapoints[-1].setpoint + step_temp,
+                setpoint=temp_night + ((i+1) * step_temp),
                 setpoint_type=SetpointDto.SetpointType.RAISE
             ))
 
