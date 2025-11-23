@@ -204,9 +204,7 @@ class HeatingService:
         step_temp = (self.temp_day - temp_night) / self.fade_steps
         step_interval = self.fade_period / self.fade_steps
 
-        datapoints = [SetpointDto(
-            timestamp=today_start, setpoint=temp_night, setpoint_type=SetpointDto.SetpointType.DROP
-        )]
+        datapoints = []
 
         self.app.log.debug(f'Heat buildup will start at {heat_raise_start}.')
 
