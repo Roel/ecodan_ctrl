@@ -28,9 +28,15 @@ class DhwMode(Enum):
     OFF = 'off'
     PENDING_NORMAL = 'pending_normal'
     RUNNING_NORMAL = 'running_normal'
+    RUNNING_STEPPED = "running_stepped"
     RUNNING_BUFFER = 'running_buffer'
     PENDING_LEGIONELLA = 'pending_legionella'
     RUNNING_LEGIONELLA = 'running_legionella'
+
+
+class DhwRunningMode(Enum):
+    NORMAL = "normal"
+    STEPPED = "stepped"
 
 
 class OperatingMode(Model):
