@@ -19,7 +19,7 @@ async def migrate(connection):
     await connection.execute(
         """
         CREATE TABLE dhw_setpoint (
-            zone text primary key,
+            type text primary key,
             setpoint float,
             last_modified timestamp
         );

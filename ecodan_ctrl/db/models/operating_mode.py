@@ -26,6 +26,7 @@ class Circuit(Enum):
 
 class DhwMode(Enum):
     OFF = 'off'
+    RUNNING_MANUAL = "running_manual"
     PENDING_NORMAL = 'pending_normal'
     RUNNING_NORMAL = 'running_normal'
     RUNNING_STEPPED = "running_stepped"

@@ -20,7 +20,9 @@ from db.base import Model
 
 
 class DhwSetpoint(Model):
-    def __init__(self, setpoint, last_modified=None):
+
+    def __init__(self, type, setpoint, last_modified=None):
+        self.type = type
         self.setpoint = round(setpoint, 1)
         self.last_modified = last_modified
 
@@ -36,10 +38,10 @@ class DhwSetpoint(Model):
         return dhw_setpoint
 
     @staticmethod
-    async def from_db():
+    async def from_type(type):
         async with Model.db.connect() as conn:
             async with conn.execute(
-                "SELECT * FROM dhw_setpoint WHERE zone = ?", ("1",)
+                "SELECT * FROM dhw_setpoint WHERE type = ?", (type,)
             ) as curs:
                 result = await curs.fetchone()
                 if result:
@@ -51,15 +53,19 @@ class DhwSetpoint(Model):
 
         now = datetime.datetime.now(tz=pytz.timezone("Europe/Brussels"))
 
-        return {"setpoint": self.setpoint, "last_modified": to_naieve_utc(now)}
+        return {
+            "type": self.type,
+            "setpoint": self.setpoint,
+            "last_modified": to_naieve_utc(now),
+        }
 
     async def save(self):
         async with self.db.connect() as conn:
             await conn.execute(
                 """INSERT INTO dhw_setpoint VALUES (
-                    '1', :setpoint, :last_modified
+                    :type, :setpoint, :last_modified
                 )
-                ON CONFLICT (zone) DO UPDATE SET
+                ON CONFLICT (type) DO UPDATE SET
                     setpoint = excluded.setpoint,
                     last_modified = excluded.last_modified
                 """,
