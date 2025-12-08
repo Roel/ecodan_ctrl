@@ -325,11 +325,12 @@ class DhwService:
         ]:
             return
 
-        current_net_power, heatpump_status, dhw_temp, next_legionella = (
+        current_net_power, heatpump_status, dhw_temp, dhw_setpoint, next_legionella = (
             await asyncio.gather(
                 self.app.clients.hab.get_current_net_power(),
                 self.app.clients.hab.get_current_state(),
                 self.app.clients.hab.get_current_dhw_temp(),
+                DhwSetpoint.from_type("current"),
                 DhwSchedule.from_mode("legionella"),
             )
         )
@@ -347,7 +348,7 @@ class DhwService:
         now = datetime.datetime.now(tz=pytz.timezone("Europe/Brussels"))
 
         if operating_mode.mode in (DhwMode.RUNNING_NORMAL, DhwMode.RUNNING_STEPPED):
-            if dhw_temp.value < self.dhw_temp_base - self.buffer_interval:
+            if dhw_temp.value < dhw_setpoint.setpoint - self.buffer_interval:
                 # not hot enough
                 self.app.log.debug(
                     f"Still heating up (now: {dhw_temp.value}) to normal temperature, not enabling buffer mode."
