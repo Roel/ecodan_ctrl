@@ -20,7 +20,8 @@ import datetime
 import pytz
 
 from db.models.dhw_schedule import DhwSchedule
-from db.models.operating_mode import Circuit, DhwMode, OperatingMode
+from db.models.operating_mode import Circuit, DhwMode, OperatingMode, DhwRunningMode
+from db.models.dhw_setpoint import DhwSetpoint
 from errors.dhw import MaxRetriesExceededError
 
 
@@ -44,10 +45,11 @@ class DhwService:
 
         self.max_retry = self.app.config['DHW_MAX_RETRY']
 
+        self.running_mode = DhwRunningMode(self.app.config["DHW_RUNNING_MODE"])
+
         self.dhw_temp_off = self.app.config['DHW_TEMP_OFF']
         self.dhw_temp_base = self.app.config['DHW_TEMP_BASE']
-        self.dhw_temp_buffer_max = self.app.config['DHW_TEMP_BUFFER']
-        self.dhw_temp_buffer_current = 0 + self.dhw_temp_base
+        self.dhw_temp_buffer_max = self.app.config["DHW_TEMP_BUFFER"]
         self.dhw_temp_drop = self.app.config['DHW_TEMP_DROP']
         self.dhw_temp_drop_ecodan = self.app.config['DHW_TEMP_DROP_ECODAN']
 
@@ -190,7 +192,12 @@ class DhwService:
 
     async def start(self):
         operating_mode = await OperatingMode.from_circuit('dhw')
-        if operating_mode.mode in [DhwMode.PENDING_NORMAL, DhwMode.RUNNING_NORMAL, DhwMode.RUNNING_BUFFER]:
+        if operating_mode.mode in [
+            DhwMode.PENDING_NORMAL,
+            DhwMode.RUNNING_NORMAL,
+            DhwMode.RUNNING_STEPPED,
+            DhwMode.RUNNING_BUFFER,
+        ]:
             return
 
         self.app.log.debug('Starting DHW cycle')
@@ -222,7 +229,29 @@ class DhwService:
             else:
                 return
 
-        await self.app.clients.ecodan.set_dhw_target_temp(self.dhw_temp_base)
+        if self.running_mode == DhwRunningMode.NORMAL:
+            dhw_target_setpoint = DhwSetpoint("target", self.dhw_temp_base)
+
+            await asyncio.gather(
+                dhw_target_setpoint.save(),
+                self.app.clients.ecodan.set_dhw_target_temp(
+                    dhw_target_setpoint.setpoint
+                ),
+            )
+        elif self.running_mode == DhwRunningMode.STEPPED:
+            dhw_temp = await self.app.clients.hab.get_current_dhw_temp()
+
+            dhw_setpoint = DhwSetpoint(
+                "current", dhw_temp.value + self.dhw_temp_drop_ecodan + 1
+            )
+
+            dhw_target_setpoint = DhwSetpoint("target", self.dhw_temp_base)
+
+            await asyncio.gather(
+                dhw_setpoint.save(),
+                dhw_target_setpoint.save(),
+                self.app.clients.ecodan.set_dhw_target_temp(dhw_setpoint.setpoint),
+            )
 
         self.app.log.debug(
             f'Setting {Circuit.DHW} to mode: {DhwMode.PENDING_NORMAL}')
@@ -233,66 +262,145 @@ class DhwService:
         schedule = await DhwSchedule.from_mode('dhw')
         await schedule.remove()
 
-    async def buffer(self):
-        operating_mode = await OperatingMode.from_circuit('dhw')
-        if operating_mode.mode not in [DhwMode.RUNNING_NORMAL, DhwMode.RUNNING_BUFFER]:
+    async def step(self):
+        if self.running_mode != DhwRunningMode.STEPPED:
             return
 
-        current_net_power, heatpump_status, dhw_temp, next_legionella = await asyncio.gather(
-            self.app.clients.hab.get_current_net_power(),
-            self.app.clients.hab.get_current_state(),
+        operating_mode = await OperatingMode.from_circuit("dhw")
+        if operating_mode.mode not in [DhwMode.RUNNING_NORMAL, DhwMode.RUNNING_STEPPED]:
+            return
+
+        dhw_temp, dhw_setpoint, dhw_target_setpoint = await asyncio.gather(
             self.app.clients.hab.get_current_dhw_temp(),
-            DhwSchedule.from_mode('legionella')
+            DhwSetpoint.from_type("current"),
+            DhwSetpoint.from_type("target"),
+        )
+
+        if operating_mode.mode == DhwMode.RUNNING_NORMAL:
+            if dhw_temp.value < dhw_setpoint.setpoint - self.buffer_interval:
+                # not hot enough
+                self.app.log.debug(
+                    f"Still heating up (now: {dhw_temp.value}) to normal temperature, not enabling stepping mode."
+                )
+                return
+            else:
+                self.app.log.debug("Enabling DHW stepping mode.")
+                self.app.log.debug(
+                    f"Setting {Circuit.DHW} to mode: {DhwMode.RUNNING_STEPPED}"
+                )
+                operating_mode.mode = DhwMode.RUNNING_STEPPED
+                await operating_mode.save()
+
+        if operating_mode.mode == DhwMode.RUNNING_STEPPED:
+            if dhw_temp.value >= dhw_setpoint.setpoint - self.buffer_interval:
+                if dhw_setpoint.setpoint <= dhw_target_setpoint.setpoint - 1:
+                    self.app.log.debug(
+                        f"""Current DHW temperature of {dhw_temp.value}° is within {self.buffer_interval}° of current target.
+                        Setting target to {dhw_setpoint.setpoint + 1}°."""
+                    )
+                    dhw_setpoint.setpoint += 1
+                    await asyncio.gather(
+                        dhw_setpoint.save(),
+                        self.app.clients.ecodan.set_dhw_target_temp(
+                            dhw_setpoint.setpoint
+                        ),
+                    )
+                else:
+                    self.app.log.debug(
+                        f"""Current DHW temperature of {dhw_temp.value}° is not yet within {self.buffer_interval}° of current target.
+                        Not increasing target yet."""
+                    )
+            else:
+                self.app.log.debug(
+                    f"""Current DHW temperature of {dhw_temp.value}° is lower than or equal to 
+                        {dhw_setpoint.setpoint - self.buffer_interval}°, nothing to do."""
+                )
+
+    async def buffer(self):
+        operating_mode = await OperatingMode.from_circuit("dhw")
+        if operating_mode.mode not in [
+            DhwMode.RUNNING_NORMAL,
+            DhwMode.RUNNING_STEPPED,
+            DhwMode.RUNNING_BUFFER,
+        ]:
+            return
+
+        current_net_power, heatpump_status, dhw_temp, dhw_setpoint, next_legionella = (
+            await asyncio.gather(
+                self.app.clients.hab.get_current_net_power(),
+                self.app.clients.hab.get_current_state(),
+                self.app.clients.hab.get_current_dhw_temp(),
+                DhwSetpoint.from_type("current"),
+                DhwSchedule.from_mode("legionella"),
+            )
         )
 
         if next_legionella is not None:
-            next_legionella_outdoor_temp = await self.app.clients.mme_soleil.get_temperature_stats(
-                next_legionella.planned_start,
-                next_legionella.planned_start + datetime.timedelta(hours=2)
+            next_legionella_outdoor_temp = (
+                await self.app.clients.mme_soleil.get_temperature_stats(
+                    next_legionella.planned_start,
+                    next_legionella.planned_start + datetime.timedelta(hours=2),
+                )
             )
         else:
             next_legionella_outdoor_temp = None
 
-        now = datetime.datetime.now(tz=pytz.timezone('Europe/Brussels'))
+        now = datetime.datetime.now(tz=pytz.timezone("Europe/Brussels"))
 
-        if operating_mode.mode == DhwMode.RUNNING_NORMAL:
-            if dhw_temp.value < self.dhw_temp_base - self.buffer_interval:
+        if operating_mode.mode in (DhwMode.RUNNING_NORMAL, DhwMode.RUNNING_STEPPED):
+            if dhw_temp.value < dhw_setpoint.setpoint - self.buffer_interval:
                 # not hot enough
                 self.app.log.debug(
-                    f'Still heating up (now: {dhw_temp.value}) to normal temperature, not enabling buffer mode.')
+                    f"Still heating up (now: {dhw_temp.value}) to normal temperature, not enabling buffer mode."
+                )
                 return
-            elif heatpump_status.heat_source == 'Heatpump' and current_net_power.value < 0:
+            elif (
+                heatpump_status.heat_source == "Heatpump"
+                and current_net_power.value < 0
+            ):
                 # enable buffer mode
-                self.app.log.debug('Enabling DHW buffer mode.')
+                self.app.log.debug("Enabling DHW buffer mode.")
                 self.app.log.debug(
-                    f'Setting {Circuit.DHW} to mode: {DhwMode.RUNNING_BUFFER}')
+                    f"Setting {Circuit.DHW} to mode: {DhwMode.RUNNING_BUFFER}"
+                )
                 self.buffer_power_stack.clear()
                 operating_mode.mode = DhwMode.RUNNING_BUFFER
                 await operating_mode.save()
             else:
                 # not enabling buffer mode
                 self.app.log.debug(
-                    f'Not enabling DHW buffer mode: heatsource is {heatpump_status.heat_source} and '
-                    f'current net power is {current_net_power.value}.')
+                    f"Not enabling DHW buffer mode: heatsource is {heatpump_status.heat_source} and "
+                    f"current net power is {current_net_power.value}."
+                )
 
         if operating_mode.mode == DhwMode.RUNNING_BUFFER:
-            if (dhw_temp.value >= self.legionella_temp_min_start
-                    and next_legionella is not None
-                    and next_legionella_outdoor_temp is not None
+            if (
+                dhw_temp.value >= self.legionella_temp_min_start
+                and next_legionella is not None
+                and next_legionella_outdoor_temp is not None
                 and (
-                    next_legionella.planned_start <= now +
-                    self.runtime + (16 * self.min_interval)
-                    or next_legionella_outdoor_temp.q50 <= self.force_legionella_min_temp)):
+                    next_legionella.planned_start
+                    <= now + self.runtime + (16 * self.min_interval)
+                    or next_legionella_outdoor_temp.q50
+                    <= self.force_legionella_min_temp
+                )
+            ):
                 self.app.log.debug(
-                    f'Legionella cycle was planned soon at {next_legionella.planned_start}, starting already.')
+                    f"Legionella cycle was planned soon at {next_legionella.planned_start}, starting already."
+                )
                 await self.app.services.legionella.start(force_start=True)
-                self.dhw_temp_buffer_current = 0 + self.dhw_temp_base
+                dhw_setpoint = DhwSetpoint("current", 0 + self.dhw_temp_base)
+                await dhw_setpoint.save()
                 return
 
-            if heatpump_status.heat_source != 'Heatpump' and heatpump_status.defrost_status == 'Normal':
+            if (
+                heatpump_status.heat_source != "Heatpump"
+                and heatpump_status.defrost_status == "Normal"
+            ):
                 # using booster, stop
                 self.app.log.debug(
-                    f'Stopping DHW buffer mode: heatsource is {heatpump_status.heat_source}')
+                    f"Stopping DHW buffer mode: heatsource is {heatpump_status.heat_source}"
+                )
                 await self.stop_buffer()
                 return
 
@@ -300,26 +408,37 @@ class DhwService:
             if not self._check_buffer_power_stack():
                 # drawing power from the net, stopping buffering
                 self.app.log.debug(
-                    f'Stopping DHW buffer mode: net power draw was {self.buffer_power_stack}')
+                    f"Stopping DHW buffer mode: net power draw was {self.buffer_power_stack}"
+                )
                 await self.stop_buffer()
                 self.buffer_power_stack.clear()
                 return
 
-            if dhw_temp.value >= self.dhw_temp_buffer_current - self.buffer_interval:
-                if self.dhw_temp_buffer_current <= self.dhw_temp_buffer_max - 1:
+            dhw_setpoint = await DhwSetpoint.from_type("current")
+
+            if dhw_temp.value >= dhw_setpoint.setpoint - self.buffer_interval:
+                if dhw_setpoint.setpoint <= self.dhw_temp_buffer_max - 1:
                     self.app.log.debug(
-                        f'''Current DHW temperature of {dhw_temp.value}° is within {self.buffer_interval}° of current target.
-                        Setting target to {self.dhw_temp_buffer_current + 1}°.''')
-                    self.dhw_temp_buffer_current += 1
-                    await self.app.clients.ecodan.set_dhw_target_temp(self.dhw_temp_buffer_current)
+                        f"""Current DHW temperature of {dhw_temp.value}° is within {self.buffer_interval}° of current target.
+                        Setting target to {dhw_setpoint.setpoint + 1}°."""
+                    )
+                    dhw_setpoint.setpoint += 1
+                    await asyncio.gather(
+                        dhw_setpoint.save(),
+                        self.app.clients.ecodan.set_dhw_target_temp(
+                            dhw_setpoint.setpoint
+                        ),
+                    )
                 else:
                     self.app.log.debug(
-                        f'''Current DHW temperature of {dhw_temp.value}° is not yet within {self.buffer_interval}° of current target.
-                        Not increasing target yet.''')
+                        f"""Current DHW temperature of {dhw_temp.value}° is not yet within {self.buffer_interval}° of current target.
+                        Not increasing target yet."""
+                    )
             else:
                 self.app.log.debug(
-                    f'''Current DHW temperature of {dhw_temp.value}° is lower than or equal to 
-                        {self.dhw_temp_buffer_current - self.buffer_interval}°, nothing to do.''')
+                    f"""Current DHW temperature of {dhw_temp.value}° is lower than or equal to 
+                        {dhw_setpoint.setpoint - self.buffer_interval}°, nothing to do."""
+                )
 
     async def stop_buffer(self):
         dhw_temp, operating_mode = await asyncio.gather(
@@ -340,7 +459,8 @@ class DhwService:
             operating_mode.mode = DhwMode.RUNNING_NORMAL
             await operating_mode.save()
 
-            self.dhw_temp_buffer_current = 0 + self.dhw_temp_base
+            dhw_setpoint = DhwSetpoint("current", 0 + self.dhw_temp_base)
+            await dhw_setpoint.save()
         else:
             # hot enough, time to stop
             await self.stop()
@@ -356,7 +476,8 @@ class DhwService:
         operating_mode.mode = DhwMode.OFF
         await operating_mode.save()
 
-        self.dhw_temp_buffer_current = 0 + self.dhw_temp_base
+        dhw_setpoint = DhwSetpoint("current", 0 + self.dhw_temp_base)
+        await dhw_setpoint.save()
 
     async def update_from_state(self):
         operating_mode, current_state = await asyncio.gather(
@@ -364,16 +485,37 @@ class DhwService:
             self.app.clients.hab.get_current_state()
         )
 
+        if (
+            operating_mode.mode == DhwMode.OFF
+            and current_state.operating_mode == "Hot water"
+        ):
+            operating_mode.mode = DhwMode.RUNNING_MANUAL
+            await operating_mode.save()
+            return
+
+        if (
+            operating_mode.mode == DhwMode.RUNNING_MANUAL
+            and current_state.operating_mode != "Hot water"
+        ):
+            operating_mode.mode = DhwMode.OFF
+            await operating_mode.save()
+            return
+
         if operating_mode.mode == DhwMode.PENDING_NORMAL:
             if current_state.operating_mode == 'Hot water':
                 self.app.log.debug(
                     f'Setting {Circuit.DHW} to mode: {DhwMode.RUNNING_NORMAL}')
                 operating_mode.mode = DhwMode.RUNNING_NORMAL
                 await operating_mode.save()
-        elif operating_mode.mode in [DhwMode.RUNNING_NORMAL, DhwMode.RUNNING_BUFFER]:
+        elif operating_mode.mode in [
+            DhwMode.RUNNING_NORMAL,
+            DhwMode.RUNNING_BUFFER,
+            DhwMode.RUNNING_STEPPED,
+        ]:
             if current_state.operating_mode != 'Hot water':
                 await self.stop()
             else:
+                await self.step()
                 await self.buffer()
 
     def _update_buffer_power_stack(self, net_power):

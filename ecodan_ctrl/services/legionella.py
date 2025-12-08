@@ -20,7 +20,8 @@ import datetime
 import pytz
 
 from db.models.dhw_schedule import DhwSchedule
-from db.models.operating_mode import Circuit, DhwMode, OperatingMode
+from db.models.operating_mode import Circuit, DhwMode, OperatingMode, DhwRunningMode
+from db.models.dhw_setpoint import DhwSetpoint
 from errors.dhw import MaxRetriesExceededError
 
 
@@ -46,6 +47,8 @@ class LegionellaService:
         self.runtime = datetime.timedelta(hours=self.runtime_hours)
 
         self.max_retry = self.app.config['DHW_MAX_RETRY']
+
+        self.running_mode = DhwRunningMode(self.app.config["DHW_RUNNING_MODE"])
 
         self.dhw_temp_off = self.app.config['DHW_TEMP_OFF']
         self.dhw_temp_legionella = self.app.config['DHW_TEMP_LEGIONELLA']
@@ -248,7 +251,29 @@ class LegionellaService:
                 else:
                     return
 
-        await self.app.clients.ecodan.set_dhw_target_temp(self.dhw_temp_legionella)
+        if self.running_mode == DhwRunningMode.NORMAL:
+            dhw_target_setpoint = DhwSetpoint("target", self.dhw_temp_legionella)
+
+            await asyncio.gather(
+                dhw_target_setpoint.save(),
+                self.app.clients.ecodan.set_dhw_target_temp(
+                    dhw_target_setpoint.setpoint
+                ),
+            )
+        elif self.running_mode == DhwRunningMode.STEPPED:
+            dhw_temp = await self.app.clients.hab.get_current_dhw_temp()
+
+            dhw_setpoint = DhwSetpoint(
+                "current", dhw_temp.value + self.dhw_temp_drop_ecodan + 1
+            )
+
+            dhw_target_setpoint = DhwSetpoint("target", self.dhw_temp_legionella)
+
+            await asyncio.gather(
+                dhw_setpoint.save(),
+                dhw_target_setpoint.save(),
+                self.app.clients.ecodan.set_dhw_target_temp(dhw_setpoint.setpoint),
+            )
 
         self.app.log.debug(
             f'Setting {Circuit.DHW} to mode: {DhwMode.PENDING_LEGIONELLA}')
@@ -264,6 +289,47 @@ class LegionellaService:
             self.app.log.debug(
                 'Removing DHW schedule, will be hot enough after Legionella cycle.')
             await dhw_schedule.remove()
+
+    async def step(self):
+        if self.running_mode != DhwRunningMode.STEPPED:
+            return
+
+        operating_mode = await OperatingMode.from_circuit("dhw")
+        if operating_mode.mode not in [DhwMode.RUNNING_LEGIONELLA]:
+            return
+
+        dhw_temp, dhw_setpoint, dhw_target_setpoint = await asyncio.gather(
+            self.app.clients.hab.get_current_dhw_temp(),
+            DhwSetpoint.from_type("current"),
+            DhwSetpoint.from_type("target"),
+        )
+
+        if dhw_temp.value < dhw_setpoint.setpoint - self.buffer_interval:
+            # not hot enough
+            self.app.log.debug(
+                f"Still heating up (now: {dhw_temp.value}) to normal temperature, not enabling stepping mode."
+            )
+        elif dhw_temp.value >= dhw_setpoint.setpoint - self.buffer_interval:
+            if dhw_setpoint.setpoint <= dhw_target_setpoint.setpoint - 1:
+                self.app.log.debug(
+                    f"""Current DHW temperature of {dhw_temp.value}° is within {self.buffer_interval}° of current target.
+                    Setting target to {dhw_setpoint.setpoint + 1}°."""
+                )
+                dhw_setpoint.setpoint += 1
+                await asyncio.gather(
+                    dhw_setpoint.save(),
+                    self.app.clients.ecodan.set_dhw_target_temp(dhw_setpoint.setpoint),
+                )
+            else:
+                self.app.log.debug(
+                    f"""Current DHW temperature of {dhw_temp.value}° is not yet within {self.buffer_interval}° of current target.
+                    Not increasing target yet."""
+                )
+        else:
+            self.app.log.debug(
+                f"""Current DHW temperature of {dhw_temp.value}° is lower than or equal to 
+                    {dhw_setpoint.setpoint - self.buffer_interval}°, nothing to do."""
+            )
 
     async def stop(self):
         operating_mode = await OperatingMode.from_circuit('dhw')
@@ -298,6 +364,8 @@ class LegionellaService:
         elif operating_mode.mode == DhwMode.RUNNING_LEGIONELLA:
             if dhw_temp.value >= self.dhw_temp_legionella and current_state.operating_mode != 'Hot water':
                 await self.stop()
+            else:
+                await self.step()
 
     def __scheduled_jobs(self):
         self.app.scheduler.add_job(

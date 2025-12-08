@@ -43,6 +43,8 @@ class Config:
     MME_SOLEIL_USERNAME = os.environ.get('MME_SOLEIL_USERNAME')
     MME_SOLEIL_PASSWORD = read_secret('MME_SOLEIL_PASSWORD')
 
+    DHW_RUNNING_MODE = os.environ.get('DHW_RUNNING_MODE')
+
     DHW_TEMP_OFF = float(os.environ.get('DHW_TEMP_OFF'))
     DHW_TEMP_BASE = float(os.environ.get('DHW_TEMP_BASE'))
     DHW_TEMP_BUFFER = float(os.environ.get('DHW_TEMP_BUFFER'))
