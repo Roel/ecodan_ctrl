@@ -21,7 +21,7 @@ import pytz
 
 from db.models.dhw_schedule import DhwSchedule
 from db.models.operating_mode import Circuit, DhwMode, OperatingMode, DhwRunningMode
-from ecodan_ctrl.db.models.dhw_setpoint import DhwSetpoint
+from db.models.dhw_setpoint import DhwSetpoint
 from errors.dhw import MaxRetriesExceededError
 
 
@@ -277,7 +277,7 @@ class DhwService:
         )
 
         if operating_mode.mode == DhwMode.RUNNING_NORMAL:
-            if dhw_temp.value < self.dhw_temp_base - self.buffer_interval:
+            if dhw_temp.value < dhw_setpoint.setpoint - self.buffer_interval:
                 # not hot enough
                 self.app.log.debug(
                     f"Still heating up (now: {dhw_temp.value}) to normal temperature, not enabling stepping mode."
