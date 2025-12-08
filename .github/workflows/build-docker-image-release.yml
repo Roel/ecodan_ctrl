@@ -1,0 +1,25 @@
+name: Docker Image build latest
+
+on:
+  push:
+    tags: ["*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Login to GitHub Container Registry"
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: roel
+          password: ${{secrets.GITHUB_TOKEN}}
+
+      - name: Build the Docker image
+        run: docker build -f docker/ecodan_ctrl/Dockerfile . --tag ghcr.io/roel/ecodan_ctrl:${{github.ref_name}}
+
+      - name: Push the Docker image
+        run: docker push ghcr.io/roel/ecodan_ctrl:${{github.ref_name}}
