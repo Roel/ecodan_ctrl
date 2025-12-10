@@ -18,6 +18,8 @@ import asyncio
 import datetime
 import logging
 
+import pytz
+
 from quart import Quart
 from quart_auth import QuartAuth
 
@@ -126,7 +128,7 @@ async def startup():
     app.scheduler = AsyncIOScheduler(event_loop=loop)
     app.scheduler.start()
 
-    app.startup_time = datetime.datetime.now()
+    app.startup_time = datetime.datetime.now(tz=pytz.timezone("Europe/Brussels"))
 
     app.clients = Clients(app)
     app.services = Services(app)
