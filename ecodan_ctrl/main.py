@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import asyncio
+import datetime
 import logging
 
 from quart import Quart
@@ -124,6 +125,8 @@ async def startup():
 
     app.scheduler = AsyncIOScheduler(event_loop=loop)
     app.scheduler.start()
+
+    app.startup_time = datetime.datetime.now()
 
     app.clients = Clients(app)
     app.services = Services(app)

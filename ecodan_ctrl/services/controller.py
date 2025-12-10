@@ -31,15 +31,23 @@ class ControllerService:
         self.dhw_temp_base = self.app.config['DHW_TEMP_BASE']
         self.dhw_temp_buffer = self.app.config['DHW_TEMP_BUFFER']
         self.dhw_temp_legionella = self.app.config['DHW_TEMP_LEGIONELLA']
+        self.dhw_temp_drop_ecodan = self.app.config['DHW_TEMP_DROP_ECODAN']
 
         self.__scheduled_jobs()
 
     async def set_operating_mode_from_state(self):
-        current_state, setpoint, current_operating_mode = await asyncio.gather(
-            self.app.clients.hab.get_current_state(),
-            self.app.clients.hab.get_setpoint(),
-            OperatingMode.from_circuit('dhw')
+        current_state, setpoint, current_operating_mode, dhw_temp = (
+            await asyncio.gather(
+                self.app.clients.hab.get_current_state(),
+                self.app.clients.hab.get_setpoint(),
+                OperatingMode.from_circuit("dhw"),
+                self.app.clients.hab.get_current_dhw_temp(),
+            )
         )
+
+        if current_operating_mode.last_modified >= self.app.startup_time:
+            # updated since start, assume up-to-date
+            return
 
         is_running_dhw = current_state.operating_mode == 'Hot water'
 
@@ -47,11 +55,11 @@ class ControllerService:
 
         if setpoint.dhw == self.dhw_temp_off:
             mode = DhwMode.OFF
-        elif setpoint.dhw < self.dhw_temp_base:
+        elif setpoint.dhw < dhw_temp.value + self.dhw_temp_drop_ecodan:
             # should be off
             await self.app.services.dhw.stop()
             return
-        elif setpoint.dhw == self.dhw_temp_base:
+        elif dhw_temp.value + self.dhw_temp_drop_ecodan < setpoint.dhw <= self.dhw_temp_base:
             mode = DhwMode.RUNNING_NORMAL if is_running_dhw else DhwMode.PENDING_NORMAL
         elif self.dhw_temp_buffer >= setpoint.dhw > self.dhw_temp_base:
             mode = DhwMode.RUNNING_BUFFER
