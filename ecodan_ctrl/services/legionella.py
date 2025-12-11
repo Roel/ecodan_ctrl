@@ -59,6 +59,8 @@ class LegionellaService:
 
         self.consumption_kwh = self.app.config['DHW_LEGIONELLA_KWH']
 
+        self.buffer_interval = 2
+
         self.__scheduled_jobs()
 
     async def plan(self):
