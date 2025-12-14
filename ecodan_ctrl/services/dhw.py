@@ -73,8 +73,14 @@ class DhwService:
         self.app.log.debug('Planning DHW cycle')
 
         operating_mode = await OperatingMode.from_circuit('dhw')
-        if operating_mode.mode in [DhwMode.PENDING_NORMAL, DhwMode.RUNNING_NORMAL, DhwMode.RUNNING_BUFFER,
-                                   DhwMode.PENDING_LEGIONELLA, DhwMode.RUNNING_LEGIONELLA]:
+        if operating_mode.mode in [
+            DhwMode.PENDING_NORMAL,
+            DhwMode.RUNNING_NORMAL,
+            DhwMode.RUNNING_BUFFER,
+            DhwMode.RUNNING_STEPPED,
+            DhwMode.PENDING_LEGIONELLA,
+            DhwMode.RUNNING_LEGIONELLA,
+        ]:
             # already running
             self.app.log.debug('Already running, not planning.')
             return
@@ -308,13 +314,12 @@ class DhwService:
                     )
                 else:
                     self.app.log.debug(
-                        f"""Current DHW temperature of {dhw_temp.value}° is not yet within {self.buffer_interval}° of current target.
-                        Not increasing target yet."""
+                        f"""Current target of {dhw_setpoint.setpoint}° is the final target, not increasing."""
                     )
             else:
                 self.app.log.debug(
-                    f"""Current DHW temperature of {dhw_temp.value}° is lower than or equal to 
-                        {dhw_setpoint.setpoint - self.buffer_interval}°, nothing to do."""
+                    f"""Current DHW temperature of {dhw_temp.value}° is not yet within {self.buffer_interval}° of current target.
+                        Not increasing target yet."""
                 )
 
     async def buffer(self):
@@ -432,8 +437,7 @@ class DhwService:
                     )
                 else:
                     self.app.log.debug(
-                        f"""Current DHW temperature of {dhw_temp.value}° is not yet within {self.buffer_interval}° of current target.
-                        Not increasing target yet."""
+                        f"""Current target of {dhw_setpoint.setpoint}° is the final target, not increasing."""
                     )
             else:
                 self.app.log.debug(

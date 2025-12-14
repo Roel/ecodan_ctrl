@@ -330,8 +330,8 @@ class LegionellaService:
                 )
         else:
             self.app.log.debug(
-                f"""Current DHW temperature of {dhw_temp.value}° is lower than or equal to 
-                    {dhw_setpoint.setpoint - self.buffer_interval}°, nothing to do."""
+                f"""Current DHW temperature of {dhw_temp.value}° is not yet within {self.buffer_interval}° of current target.
+                    Not increasing target yet."""
             )
 
     async def stop(self):
