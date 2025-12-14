@@ -17,6 +17,7 @@
 import asyncio
 import datetime
 
+import math
 import pytz
 
 from db.models.dhw_schedule import DhwSchedule
@@ -242,7 +243,7 @@ class DhwService:
             dhw_temp = await self.app.clients.hab.get_current_dhw_temp()
 
             dhw_setpoint = DhwSetpoint(
-                "current", dhw_temp.value + self.dhw_temp_drop_ecodan + 1
+                "current", math.ceil(dhw_temp.value + self.dhw_temp_drop_ecodan + 1)
             )
 
             dhw_target_setpoint = DhwSetpoint("target", self.dhw_temp_base)
