@@ -64,6 +64,8 @@ class Config:
         os.environ.get('DHW_LEGIONELLA_RUNTIME_HOURS'))
     DHW_LEGIONELLA_KWH = float(os.environ.get('DHW_LEGIONELLA_KWH'))
 
+    DHW_ECODAN_MAX_RUNTIME_HOURS = int(os.environ.get("DHW_ECODAN_MAX_RUNTIME_HOURS"))
+
     DHW_MAX_RETRY = int(os.environ.get('DHW_MAX_RETRY'))
     DHW_MIN_INTERVAL_MINUTES = int(os.environ.get('DHW_MIN_INTERVAL_MINUTES'))
     DHW_MIN_INTERVAL_RETRY_MINUTES = int(

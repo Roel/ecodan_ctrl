@@ -47,6 +47,11 @@ class LegionellaService:
         self.runtime_hours = self.app.config['DHW_LEGIONELLA_RUNTIME_HOURS']
         self.runtime = datetime.timedelta(hours=self.runtime_hours)
 
+        self.max_runtime_hours_ecodan = self.app.config["DHW_ECODAN_MAX_RUNTIME_HOURS"]
+        self.max_runtime_ecodan = datetime.timedelta(
+            hours=self.max_runtime_hours_ecodan
+        )
+
         self.max_retry = self.app.config['DHW_MAX_RETRY']
 
         self.running_mode = DhwRunningMode(self.app.config["DHW_RUNNING_MODE"])
@@ -61,6 +66,11 @@ class LegionellaService:
         self.consumption_kwh = self.app.config['DHW_LEGIONELLA_KWH']
 
         self.buffer_interval = 2
+
+        # fallback
+        self.timestamp_started = datetime.datetime.now(
+            tz=pytz.timezone("Europe/Brussels")
+        )
 
         self.__scheduled_jobs()
 
@@ -293,6 +303,10 @@ class LegionellaService:
                 'Removing DHW schedule, will be hot enough after Legionella cycle.')
             await dhw_schedule.remove()
 
+        self.timestamp_started = datetime.datetime.now(
+            tz=pytz.timezone("Europe/Brussels")
+        )
+
     async def step(self):
         if self.running_mode != DhwRunningMode.STEPPED:
             return
@@ -358,6 +372,8 @@ class LegionellaService:
             self.app.clients.hab.get_current_dhw_temp()
         )
 
+        now = datetime.datetime.now(tz=pytz.timezone("Europe/Brussels"))
+
         if operating_mode.mode == DhwMode.PENDING_LEGIONELLA:
             if current_state.operating_mode == 'Hot water':
                 self.app.log.debug(
@@ -366,6 +382,11 @@ class LegionellaService:
                 await operating_mode.save()
         elif operating_mode.mode == DhwMode.RUNNING_LEGIONELLA:
             if dhw_temp.value >= self.dhw_temp_legionella and current_state.operating_mode != 'Hot water':
+                await self.stop()
+            elif (
+                current_state.operating_mode != "Hot water"
+                and self.timestamp_started <= now - self.max_runtime_ecodan
+            ):
                 await self.stop()
             else:
                 await self.step()
