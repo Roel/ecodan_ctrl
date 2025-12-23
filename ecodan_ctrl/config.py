@@ -44,6 +44,9 @@ class Config:
     MME_SOLEIL_PASSWORD = read_secret('MME_SOLEIL_PASSWORD')
 
     DHW_RUNNING_MODE = os.environ.get('DHW_RUNNING_MODE')
+    DHW_RUNNING_MODE_AUTO_STEP_MAX_TEMP = float(
+        os.environ.get("DHW_RUNNING_MODE_AUTO_STEP_MAX_TEMP")
+    )
 
     DHW_TEMP_OFF = float(os.environ.get('DHW_TEMP_OFF'))
     DHW_TEMP_BASE = float(os.environ.get('DHW_TEMP_BASE'))

@@ -38,6 +38,7 @@ class DhwMode(Enum):
 class DhwRunningMode(Enum):
     NORMAL = "normal"
     STEPPED = "stepped"
+    AUTO = "auto"
 
 
 class OperatingMode(Model):

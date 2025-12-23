@@ -47,6 +47,9 @@ class DhwService:
         self.max_retry = self.app.config['DHW_MAX_RETRY']
 
         self.running_mode = DhwRunningMode(self.app.config["DHW_RUNNING_MODE"])
+        self.running_mode_stepped_max_temp = self.app.config[
+            "DHW_RUNNING_MODE_AUTO_STEP_MAX_TEMP"
+        ]
 
         self.dhw_temp_off = self.app.config['DHW_TEMP_OFF']
         self.dhw_temp_base = self.app.config['DHW_TEMP_BASE']
@@ -209,9 +212,10 @@ class DhwService:
 
         self.app.log.debug('Starting DHW cycle')
 
-        can_start, next_legionella = await asyncio.gather(
+        can_start, next_legionella, outside_temp = await asyncio.gather(
             self.app.services.controller.can_start(),
-            DhwSchedule.from_mode('legionella')
+            DhwSchedule.from_mode("legionella"),
+            self.app.clients.hab.get_current_outside_temp(),
         )
 
         now = datetime.datetime.now(tz=pytz.timezone('Europe/Brussels'))
@@ -236,7 +240,10 @@ class DhwService:
             else:
                 return
 
-        if self.running_mode == DhwRunningMode.NORMAL:
+        if self.running_mode == DhwRunningMode.NORMAL or (
+            self.running_mode == DhwRunningMode.AUTO
+            and outside_temp.value > self.running_mode_stepped_max_temp
+        ):
             dhw_target_setpoint = DhwSetpoint("target", self.dhw_temp_base)
 
             await asyncio.gather(
@@ -245,7 +252,7 @@ class DhwService:
                     dhw_target_setpoint.setpoint
                 ),
             )
-        elif self.running_mode == DhwRunningMode.STEPPED:
+        else:
             dhw_temp = await self.app.clients.hab.get_current_dhw_temp()
 
             dhw_setpoint = DhwSetpoint(

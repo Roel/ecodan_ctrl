@@ -50,6 +50,10 @@ class HabClient:
         r = await self.client.get(f'{self.base_url}/dhw/temp')
         return TimeDataDto.from_json(r.json())
 
+    async def get_current_outside_temp(self):
+        r = await self.client.get(f"{self.base_url}/outside/temp")
+        return TimeDataDto.from_json(r.json())
+
     async def get_baseline_consumption(self):
         r = await self.client.get(f'{self.base_url}/consumption/baseline')
         return TimePeriodStatsDto.from_json(r.json())
