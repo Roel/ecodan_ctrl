@@ -316,7 +316,7 @@ class LegionellaService:
         )
 
     async def step(self):
-        if self.running_mode != DhwRunningMode.STEPPED:
+        if self.running_mode not in (DhwRunningMode.STEPPED, DhwRunningMode.AUTO):
             return
 
         operating_mode = await OperatingMode.from_circuit("dhw")
