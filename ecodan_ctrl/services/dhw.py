@@ -103,7 +103,7 @@ class DhwService:
             self.app.log.debug('Already planned, not replanning.')
             return
 
-        current_temp, dhw_base_temp = asyncio.gather(
+        current_temp, dhw_base_temp = await asyncio.gather(
             self.app.clients.hab.get_current_dhw_temp(), self.get_dhw_base_temp()
         )
 
@@ -143,7 +143,7 @@ class DhwService:
         if current_schedule is None:
             return
 
-        current_temp, dhw_base_temp = asyncio.gather(
+        current_temp, dhw_base_temp = await asyncio.gather(
             self.app.clients.hab.get_current_dhw_temp(), self.get_dhw_base_temp()
         )
 
