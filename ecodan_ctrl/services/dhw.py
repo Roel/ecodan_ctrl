@@ -511,6 +511,7 @@ class DhwService:
         ):
             operating_mode.mode = DhwMode.OFF
             await operating_mode.save()
+            await self.stop()
             return
 
         if operating_mode.mode == DhwMode.PENDING_NORMAL:
