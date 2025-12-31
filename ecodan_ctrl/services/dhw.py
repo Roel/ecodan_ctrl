@@ -55,6 +55,7 @@ class DhwService:
         self.dhw_temp_base = self.app.config['DHW_TEMP_BASE']
         self.dhw_temp_buffer_max = self.app.config["DHW_TEMP_BUFFER"]
         self.dhw_temp_drop = self.app.config['DHW_TEMP_DROP']
+        self.dhw_temp_drop_winter = self.app.config["DHW_TEMP_DROP_WINTER"]
         self.dhw_temp_drop_ecodan = self.app.config['DHW_TEMP_DROP_ECODAN']
 
         self.legionella_temp_min_start = self.app.config['DHW_TEMP_LEGIONELLA'] - \
@@ -69,6 +70,14 @@ class DhwService:
         self.consumption_kwh = self.app.config['DHW_NORMAL_KWH']
 
         self.__scheduled_jobs()
+
+    async def get_dhw_base_temp(self):
+        summer_mode = await self.app.services.heating.is_summer_mode()
+
+        if summer_mode:
+            return self.dhw_temp_base - self.dhw_temp_drop
+        else:
+            return self.dhw_temp_base - self.dhw_temp_drop_winter
 
     async def plan(self):
         now = datetime.datetime.now(tz=pytz.timezone('Europe/Brussels'))
@@ -94,8 +103,11 @@ class DhwService:
             self.app.log.debug('Already planned, not replanning.')
             return
 
-        current_temp = await self.app.clients.hab.get_current_dhw_temp()
-        if current_temp.value > self.dhw_temp_base - self.dhw_temp_drop:
+        current_temp, dhw_base_temp = asyncio.gather(
+            self.app.clients.hab.get_current_dhw_temp(), self.get_dhw_base_temp()
+        )
+
+        if current_temp.value > dhw_base_temp:
             # still hot enough
             self.app.log.debug(
                 'DHW above threshold temperature, not planning.')
@@ -131,8 +143,11 @@ class DhwService:
         if current_schedule is None:
             return
 
-        current_temp = await self.app.clients.hab.get_current_dhw_temp()
-        if current_temp.value > self.dhw_temp_base - self.dhw_temp_drop:
+        current_temp, dhw_base_temp = asyncio.gather(
+            self.app.clients.hab.get_current_dhw_temp(), self.get_dhw_base_temp()
+        )
+
+        if current_temp.value > dhw_base_temp:
             # hot enough for some reason (triggered manually?)
             self.app.log.debug(
                 'DHW above threshold temperature, removing schedule.')

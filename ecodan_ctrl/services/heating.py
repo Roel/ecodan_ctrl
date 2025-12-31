@@ -74,7 +74,7 @@ class HeatingService:
 
         self.__scheduled_jobs()
 
-    async def plan_summer_mode(self):
+    async def is_summer_mode(self, log=False):
 
         async def get_temp_stats(day_offset):
             start_time = pytz.timezone('Europe/Brussels').localize(
@@ -99,32 +99,38 @@ class HeatingService:
 
         inside_temp = await self.app.clients.hab.get_house_temperature()
 
-        today_start = pytz.timezone('Europe/Brussels').localize(
-            datetime.datetime.combine(
-                datetime.date.today(),
-                datetime.time(0, 0, 0))
-        )
-
         summer_mode = False
 
         if outside_temp < self.summer_mode_max_outside_force_off:
-            self.app.log.debug(
-                f'Average outside temp of {outside_temp} is lower than {self.summer_mode_max_outside_force_off}: '
-                f'force disabling summer mode.')
+            log and self.app.log.debug(
+                f"Average outside temp of {outside_temp} is lower than {self.summer_mode_max_outside_force_off}: "
+                f"force disabling summer mode."
+            )
             summer_mode = False
 
         elif inside_temp.q50 >= self.summer_mode_min_inside_force:
-            self.app.log.debug(
-                f'Internal temp of {inside_temp.q50} is greater than or equal to {self.summer_mode_min_inside_force}: '
-                f'force enabling summer mode.')
+            log and self.app.log.debug(
+                f"Internal temp of {inside_temp.q50} is greater than or equal to {self.summer_mode_min_inside_force}: "
+                f"force enabling summer mode."
+            )
             summer_mode = True
 
         elif outside_temp >= self.summer_mode_min_outside or inside_temp.q50 >= self.summer_mode_min_inside:
-            self.app.log.debug(
-                f'Average outside temp of {outside_temp} is greater than or equal to {self.summer_mode_min_outside} '
-                f'or internal temp of {inside_temp.q50} is greater than or equal to {self.summer_mode_min_inside}: '
-                f'enabling summer mode.')
+            log and self.app.log.debug(
+                f"Average outside temp of {outside_temp} is greater than or equal to {self.summer_mode_min_outside} "
+                f"or internal temp of {inside_temp.q50} is greater than or equal to {self.summer_mode_min_inside}: "
+                f"enabling summer mode."
+            )
             summer_mode = True
+
+        return summer_mode
+
+    async def plan_summer_mode(self):
+        summer_mode = await self.is_summer_mode(log=True)
+
+        today_start = pytz.timezone("Europe/Brussels").localize(
+            datetime.datetime.combine(datetime.date.today(), datetime.time(0, 0, 0))
+        )
 
         if summer_mode:
             return [SetpointDto(

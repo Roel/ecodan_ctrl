@@ -51,8 +51,11 @@ class Config:
     DHW_TEMP_OFF = float(os.environ.get('DHW_TEMP_OFF'))
     DHW_TEMP_BASE = float(os.environ.get('DHW_TEMP_BASE'))
     DHW_TEMP_BUFFER = float(os.environ.get('DHW_TEMP_BUFFER'))
+
     DHW_TEMP_DROP = float(os.environ.get('DHW_TEMP_DROP'))
+    DHW_TEMP_DROP_WINTER = float(os.environ.get("DHW_TEMP_DROP_WINTER"))
     DHW_TEMP_DROP_ECODAN = float(os.environ.get('DHW_TEMP_DROP_ECODAN'))
+
     DHW_NORMAL_RUNTIME_HOURS = int(os.environ.get('DHW_NORMAL_RUNTIME_HOURS'))
     DHW_NORMAL_INTERVAL_MAX_HOURS = int(
         os.environ.get('DHW_NORMAL_INTERVAL_MAX_HOURS'))
