@@ -47,6 +47,11 @@ class ControllerService:
 
         if current_operating_mode.last_modified >= self.app.startup_time:
             # updated since start, assume up-to-date
+
+            if setpoint.dhw < dhw_temp.value + self.dhw_temp_drop_ecodan:
+                # should be off
+                await self.app.services.dhw.stop()
+
             return
 
         is_running_dhw = current_state.operating_mode == 'Hot water'
