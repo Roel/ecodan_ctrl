@@ -369,9 +369,14 @@ class LegionellaService:
         operating_mode.mode = DhwMode.OFF
         await operating_mode.save()
 
-        now = datetime.datetime.now(tz=pytz.timezone('Europe/Brussels'))
-        self.app.scheduler.add_job(
-            self.plan, 'date', run_date=now + datetime.timedelta(minutes=60))
+        dhw_temp = await self.app.clients.hab.get_current_dhw_temp()
+
+        if dhw_temp.value >= self.dhw_temp_legionella:
+            now = datetime.datetime.now(tz=pytz.timezone('Europe/Brussels'))
+            self.app.scheduler.add_job(
+                self.plan, 'date', run_date=now + datetime.timedelta(minutes=60))
+        else:
+            await self.plan()
 
     async def update_from_state(self):
         operating_mode, current_state, dhw_temp = await asyncio.gather(
