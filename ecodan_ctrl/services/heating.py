@@ -316,7 +316,15 @@ class HeatingService:
 
         # always drop buffer
         if buffer_bounds is None or buffer_bounds.end is None:
-            buffer_drop_start = now
+            # find latest RAISE setpoint
+            buffer_drop_start = sorted(
+                [
+                    d
+                    for d in datapoints
+                    if d.setpoint_type == SetpointDto.SetpointType.RAISE
+                ],
+                key=lambda x: x.timestamp,
+            )[-1].timestamp
         else:
             buffer_drop_start = buffer_bounds.end - fade_offset
 
