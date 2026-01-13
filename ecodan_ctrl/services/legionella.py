@@ -273,9 +273,11 @@ class LegionellaService:
             self.running_mode == DhwRunningMode.AUTO
             and outside_temp.value > self.running_mode_stepped_max_temp
         ):
+            dhw_setpoint = DhwSetpoint("current", self.dhw_temp_legionella)
             dhw_target_setpoint = DhwSetpoint("target", self.dhw_temp_legionella)
 
             await asyncio.gather(
+                dhw_setpoint.save(),
                 dhw_target_setpoint.save(),
                 self.app.clients.ecodan.set_dhw_target_temp(
                     dhw_target_setpoint.setpoint
@@ -329,10 +331,15 @@ class LegionellaService:
             DhwSetpoint.from_type("target"),
         )
 
-        if dhw_temp.value < dhw_setpoint.setpoint - self.buffer_interval:
+        if dhw_setpoint.setpoint == dhw_target_setpoint.setpoint:
+            # setpoint already at target
+            self.app.log.debug(
+                f"Current setpoint already equals target setpoint, nothing to do."
+            )
+        elif dhw_temp.value < dhw_setpoint.setpoint - self.buffer_interval:
             # not hot enough
             self.app.log.debug(
-                f"Still heating up (now: {dhw_temp.value}) to normal temperature, not enabling stepping mode."
+                f"Still heating up (now: {dhw_temp.value}) to normal temperature, not increasing current target yet."
             )
         elif dhw_temp.value >= dhw_setpoint.setpoint - self.buffer_interval:
             if dhw_setpoint.setpoint <= dhw_target_setpoint.setpoint - 1:
