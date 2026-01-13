@@ -116,6 +116,21 @@ class DhwService:
         first_start = now + self.min_interval
         ultimate_start = now + self.max_interval - self.runtime
 
+        if ultimate_start.hour >= 22:
+            ultimate_start = pytz.timezone("Europe/Brussels").localize(
+                datetime.datetime.combine(
+                    ultimate_start.date + datetime.timedelta(days=1),
+                    datetime.time(4, 30, 0),
+                )
+            )
+        elif ultimate_start.hour <= 4:
+            ultimate_start = pytz.timezone("Europe/Brussels").localize(
+                datetime.datetime.combine(
+                    ultimate_start.date,
+                    datetime.time(4, 30, 0),
+                )
+            )
+
         planned_start = (await self.app.clients.mme_soleil.get_peak_production(
             start=first_start,
             end=ultimate_start,
