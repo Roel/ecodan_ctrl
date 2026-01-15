@@ -138,8 +138,6 @@ class HeatingService:
                 setpoint_type=SetpointDto.SetpointType.DROP)]
 
     async def plan(self):
-        now = datetime.datetime.now(tz=pytz.timezone('Europe/Brussels'))
-
         self.app.log.debug('Planning heating schedule.')
 
         summer_mode_schedule = await self.plan_summer_mode()
@@ -398,6 +396,41 @@ class HeatingService:
             self.app.log.debug(
                 f'State setpoint of {state_setpoint.setpoint} differs from current target setpoint '
                 f'of {current_setpoint.setpoint}.')
+
+            if (
+                current_setpoint.setpoint_type == SetpointDto.SetpointType.RAISE
+                and current_setpoint.setpoint > heatpump_setpoint
+            ):
+                now = datetime.datetime.now(tz=pytz.timezone("Europe/Brussels"))
+
+                heatpump_state, house_temp, current_net_power = await asyncio.gather(
+                    self.app.clients.hab.get_current_state(),
+                    self.app.clients.hab.get_house_temperature(
+                        start=(now - datetime.timedelta(minutes=15)), end=now
+                    ),
+                    self.app.clients.hab.get_current_net_power(),
+                )
+
+                if heatpump_state.defrost_status != "Normal":
+                    # in defrost state, wait
+                    self.app.log.debug('We\'re in defrost state, wait before raising setpoint.')
+                    return
+
+                if heatpump_state.operating_mode in ("Hot water", "Legionella"):
+                    # running DHW, wait
+                    self.app.log.debug('We\'re in DHW mode, wait before raising setpoint.')
+                    return
+
+                if (
+                    heatpump_state.operating_mode == "Heating"
+                    and house_temp.q50 < heatpump_setpoint
+                    and current_net_power.value > self.buffer_min_production_w * -0.5
+                ):
+                    # not raising yet
+                    self.app.log.debug(
+                        "Not raising setpoint yet, already heating up and not very sunny. Let's do gentle."
+                    )
+                    return
 
             if current_setpoint.setpoint_type in (SetpointDto.SetpointType.RAISE, SetpointDto.SetpointType.RAISE_BUFFER):
                 if current_setpoint.setpoint <= heatpump_setpoint:
