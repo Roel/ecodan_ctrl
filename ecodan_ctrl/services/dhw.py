@@ -119,14 +119,14 @@ class DhwService:
         if ultimate_start.hour >= 22:
             ultimate_start = pytz.timezone("Europe/Brussels").localize(
                 datetime.datetime.combine(
-                    ultimate_start.date + datetime.timedelta(days=1),
+                    ultimate_start.date() + datetime.timedelta(days=1),
                     datetime.time(4, 30, 0),
                 )
             )
         elif ultimate_start.hour <= 4:
             ultimate_start = pytz.timezone("Europe/Brussels").localize(
                 datetime.datetime.combine(
-                    ultimate_start.date,
+                    ultimate_start.date(),
                     datetime.time(4, 30, 0),
                 )
             )
