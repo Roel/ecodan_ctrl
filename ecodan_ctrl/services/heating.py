@@ -372,10 +372,14 @@ class HeatingService:
             return None
 
     async def evaluate(self):
+        if len(self.heating_plan) == 0:
+            # no plan, then make one
+            self.app.log.debug("No heating setpoints in plan.")
+            await self.plan()
+
         current_setpoint = self.get_current_setpoint()
         if current_setpoint is None:
-            self.app.log.debug('No heating setpoint in plan.')
-            await self.plan()
+            # no setpoint -> nothing to do
             return
 
         state_setpoint, heatpump_setpoint = await asyncio.gather(

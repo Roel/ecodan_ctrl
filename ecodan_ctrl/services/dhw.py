@@ -436,11 +436,10 @@ class DhwService:
                 )
             ):
                 self.app.log.debug(
-                    f"Legionella cycle was planned soon at {next_legionella.planned_start}, starting already."
+                    f"Legionella cycle was planned soon at {next_legionella.planned_start} or "
+                    f"when expecting cold temperature ({next_legionella_outdoor_temp.q50}°), starting already."
                 )
                 await self.app.services.legionella.start(force_start=True)
-                dhw_setpoint = DhwSetpoint("current", 0 + self.dhw_temp_base)
-                await dhw_setpoint.save()
                 return
 
             if (
