@@ -386,21 +386,21 @@ class LegionellaService:
             await self.plan()
 
     async def update_from_state(self):
-        operating_mode, current_state = await asyncio.gather(
-            OperatingMode.from_circuit('dhw'),
-            self.app.clients.hab.get_current_state()
-        )
-
+        operating_mode = await OperatingMode.from_circuit("dhw")
         now = datetime.datetime.now(tz=pytz.timezone("Europe/Brussels"))
 
         if operating_mode.mode == DhwMode.PENDING_LEGIONELLA:
+            current_state = await self.app.clients.hab.get_current_state()
             if current_state.operating_mode == 'Hot water':
                 self.app.log.debug(
                     f'Setting {Circuit.DHW} to mode: {DhwMode.RUNNING_LEGIONELLA}')
                 operating_mode.mode = DhwMode.RUNNING_LEGIONELLA
                 await operating_mode.save()
         elif operating_mode.mode == DhwMode.RUNNING_LEGIONELLA:
-            dhw_temp = await self.app.clients.hab.get_current_dhw_temp()
+            dhw_temp, current_state = await asyncio.gather(
+                self.app.clients.hab.get_current_dhw_temp(),
+                self.app.clients.hab.get_current_state(),
+            )
             if dhw_temp.value >= self.dhw_temp_legionella and current_state.operating_mode != 'Hot water':
                 await self.stop()
             elif (
