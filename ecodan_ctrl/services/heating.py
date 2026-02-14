@@ -281,7 +281,7 @@ class HeatingService:
 
         for c in cluster_set.clusters:
             timestamp_stop = c.get_start() - self.price_pause_grace_period
-            timestamp_resume = c.get_end()
+            timestamp_resume = c.get_end() + datetime.timedelta(minutes=15)
 
             self.app.log.debug(
                 f"Heating will pause on {timestamp_stop} and resume on {timestamp_resume}, due to high price."
