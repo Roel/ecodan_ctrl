@@ -733,4 +733,5 @@ class HeatingService:
     def __scheduled_jobs(self):
         self.app.scheduler.add_job(self.plan, 'cron', hour='4', minute='10')
         self.app.scheduler.add_job(self.plan, 'cron', hour='13', minute='10')
+        self.app.scheduler.add_job(self.plan, 'cron', hour='15', minute='10')
         self.app.scheduler.add_job(self.check_idling, 'cron', minute='*/5')
