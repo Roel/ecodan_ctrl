@@ -47,7 +47,10 @@ class ControllerService:
 
         is_running_dhw = current_state.operating_mode == "Hot water"
 
-        if current_operating_mode.last_modified >= self.app.startup_time:
+        if (
+            current_operating_mode is not None
+            and current_operating_mode.last_modified >= self.app.startup_time
+        ):
             # updated since start, assume up-to-date
 
             if (

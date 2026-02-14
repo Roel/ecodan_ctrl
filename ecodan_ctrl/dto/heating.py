@@ -25,6 +25,8 @@ class SetpointDto:
         RAISE = 1
         DROP = 2
         RAISE_BUFFER = 3
+        STOP = 4
+        RESUME = 5
 
     timestamp: datetime.datetime
     setpoint: float
@@ -32,5 +34,11 @@ class SetpointDto:
 
     def __init__(self, timestamp, setpoint, setpoint_type):
         self.timestamp = timestamp
-        self.setpoint = round(setpoint, 1)
+        if setpoint is not None:
+            self.setpoint = round(setpoint, 1)
+        else:
+            self.setpoint = None
         self.setpoint_type = setpoint_type
+
+    def __str__(self):
+        return f"<dto.heating.SetPointDto {self.timestamp}, {self.setpoint}, {self.setpoint_type}>"

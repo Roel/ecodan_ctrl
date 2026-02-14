@@ -23,6 +23,83 @@ from db.models.heating_setpoint import HeatingSetpoint
 from db.models.operating_mode import DhwMode, OperatingMode
 from dto.heating import SetpointDto
 
+from util.cluster import ClusterSet
+
+
+class HeatingSchedule:
+    def __init__(self, setpoints=None):
+        self.setpoints = []
+
+        if setpoints is not None:
+            self.setpoints.extend(setpoints)
+
+    def is_empty(self):
+        return (
+            len(
+                [
+                    sp
+                    for sp in self.setpoints
+                    if sp.setpoint_type
+                    in (
+                        SetpointDto.SetpointType.RAISE,
+                        SetpointDto.SetpointType.DROP,
+                        SetpointDto.SetpointType.RAISE_BUFFER,
+                    )
+                ]
+            )
+            == 0
+        )
+
+    def add_setpoint(self, setpoint):
+        self.setpoints.append(setpoint)
+
+    def get_last_setpoint(self):
+        return self.setpoints[-1]
+
+    def get_most_recent_setpoint_of_type(self, setpoint_type):
+        return [d for d in self.__chrono() if d.setpoint_type == setpoint_type][-1]
+
+    def get_current_setpoint(self):
+        now = datetime.datetime.now(tz=pytz.timezone("Europe/Brussels"))
+        past_setpoints = [
+            sp
+            for sp in self.__chrono()
+            if sp.timestamp <= now
+            and sp.setpoint_type
+            in (
+                SetpointDto.SetpointType.RAISE,
+                SetpointDto.SetpointType.DROP,
+                SetpointDto.SetpointType.RAISE_BUFFER,
+            )
+        ]
+
+        if len(past_setpoints) > 0:
+            return past_setpoints[-1]
+        else:
+            return None
+
+    def get_current_state(self):
+        now = datetime.datetime.now(tz=pytz.timezone("Europe/Brussels"))
+        past_setpoints = [
+            sp
+            for sp in self.__chrono()
+            if sp.timestamp <= now
+            and sp.setpoint_type
+            in (SetpointDto.SetpointType.STOP, SetpointDto.SetpointType.RESUME)
+        ]
+
+        if len(past_setpoints) > 0:
+            return past_setpoints[-1]
+        else:
+            return SetpointDto(now, None, SetpointDto.SetpointType.RESUME)
+
+    def __chrono(self):
+        return sorted(self.setpoints, key=lambda sp: sp.timestamp)
+
+    def __str__(self):
+        return f'<services.heating.HeatingSchedule [{", ".join(sp.__str__() for sp in self.__chrono())}]>'
+
+
 class HeatingService:
     def __init__(self, app):
         self.app = app
@@ -51,6 +128,20 @@ class HeatingService:
             'HEATING_SUMMER_MODE_MAX_OUTSIDE_FORCE_OFF']
         self.summer_mode_temp = self.app.config['HEATING_SUMMER_MODE_TEMP']
 
+        self.price_pause_baseline_period = datetime.timedelta(
+            days=self.app.config["HEATING_PRICE_PAUSE_BASELINE_PERIOD_DAYS"]
+        )
+        self.price_pause_max_count = self.app.config["HEATING_PRICE_PAUSE_MAX_COUNT"]
+        self.price_pause_max_size = datetime.timedelta(
+            minutes=self.app.config["HEATING_PRICE_PAUSE_MAX_SIZE_MINUTES"]
+        )
+        self.price_pause_min_interval = datetime.timedelta(
+            minutes=self.app.config["HEATING_PRICE_PAUSE_MIN_INTERVAL_MINUTES"]
+        )
+        self.price_pause_grace_period = datetime.timedelta(
+            minutes=self.app.config["HEATING_PRICE_PAUSE_GRACE_PERIOD_MINUTES"]
+        )
+
         self.fade_period = datetime.timedelta(
             hours=self.app.config['HEATING_FADE_PERIOD_HOURS'])
         self.fade_steps = self.app.config['HEATING_FADE_STEPS']
@@ -69,7 +160,7 @@ class HeatingService:
             raise ValueError(
                 'Invalid setting for HEATING_FADE_DURING: should be day, night, or dusk.')
 
-        self.heating_plan = []
+        self.heating_plan = HeatingSchedule()
         self.in_idle_state_since = None
 
         self.__scheduled_jobs()
@@ -133,9 +224,79 @@ class HeatingService:
         )
 
         if summer_mode:
-            return [SetpointDto(
-                timestamp=today_start, setpoint=self.summer_mode_temp,
-                setpoint_type=SetpointDto.SetpointType.DROP)]
+            return HeatingSchedule(
+                [
+                    SetpointDto(
+                        timestamp=today_start,
+                        setpoint=self.summer_mode_temp,
+                        setpoint_type=SetpointDto.SetpointType.DROP,
+                    )
+                ]
+            )
+
+    async def plan_price_exclusions(self):
+        if self.price_pause_max_count < 1:
+            return []
+
+        today_start = pytz.timezone("Europe/Brussels").localize(
+            datetime.datetime.combine(datetime.date.today(), datetime.time(0, 0, 0))
+        )
+
+        today_end = pytz.timezone("Europe/Brussels").localize(
+            datetime.datetime.combine(datetime.date.today(), datetime.time(23, 59, 59))
+        )
+
+        tomorrow_end = pytz.timezone("Europe/Brussels").localize(
+            datetime.datetime.combine(
+                datetime.date.today() + datetime.timedelta(days=1),
+                datetime.time(23, 59, 59),
+            )
+        )
+
+        baseline_price, simulated_price = await asyncio.gather(
+            self.app.clients.hab.get_simulated_price_baseline(
+                today_start - self.price_pause_baseline_period, tomorrow_end
+            ),
+            self.app.clients.hab.get_simulated_price_detail(today_start, today_end),
+        )
+        if baseline_price is None:
+            baseline_price = await self.app.clients.hab.get_simulated_price_baseline(
+                today_start - self.price_pause_baseline_period, today_end
+            )
+
+        cluster_set = ClusterSet(
+            max_count=self.price_pause_max_count,
+            max_size=self.price_pause_max_size,
+            min_interval=self.price_pause_min_interval,
+        )
+        high_price_threshold = baseline_price.q50 + 1.2 * baseline_price.stddev
+
+        for quarter in sorted(simulated_price, key=lambda x: x.value, reverse=True):
+            if quarter.value >= high_price_threshold:
+                cluster_set.add_datapoint(quarter)
+            else:
+                break
+
+        setpoints = []
+
+        for c in cluster_set.clusters:
+            timestamp_stop = c.get_start() - self.price_pause_grace_period
+            timestamp_resume = c.get_end()
+
+            self.app.log.debug(
+                f"Heating will pause on {timestamp_stop} and resume on {timestamp_resume}, due to high price."
+            )
+
+            setpoints.extend(
+                [
+                    SetpointDto(timestamp_stop, 16, SetpointDto.SetpointType.STOP),
+                    SetpointDto(
+                        timestamp_resume, None, SetpointDto.SetpointType.RESUME
+                    ),
+                ]
+            )
+
+        return setpoints
 
     async def plan(self):
         self.app.log.debug('Planning heating schedule.')
@@ -208,19 +369,26 @@ class HeatingService:
         step_temp = (self.temp_day - temp_night) / self.fade_steps
         step_interval = self.fade_period / self.fade_steps
 
-        datapoints = []
+        heating_schedule = HeatingSchedule()
 
         self.app.log.debug(f'Heat buildup will start at {heat_raise_start}.')
 
-        datapoints.append(SetpointDto(
-            timestamp=heat_raise_start, setpoint=temp_night, setpoint_type=SetpointDto.SetpointType.RAISE))
+        heating_schedule.add_setpoint(
+            SetpointDto(
+                timestamp=heat_raise_start,
+                setpoint=temp_night,
+                setpoint_type=SetpointDto.SetpointType.RAISE,
+            )
+        )
 
         for i in range(self.fade_steps):
-            datapoints.append(SetpointDto(
-                timestamp=heat_raise_start + ((i+1) * step_interval),
-                setpoint=temp_night + ((i+1) * step_temp),
-                setpoint_type=SetpointDto.SetpointType.RAISE
-            ))
+            heating_schedule.add_setpoint(
+                SetpointDto(
+                    timestamp=heat_raise_start + ((i + 1) * step_interval),
+                    setpoint=temp_night + ((i + 1) * step_temp),
+                    setpoint_type=SetpointDto.SetpointType.RAISE,
+                )
+            )
 
         if night_temp.q50 <= self.fade_min_temp_force_off:
             # too cold, don't drop
@@ -295,15 +463,23 @@ class HeatingService:
                 f'dropping setpoint to {self.temp_night} tonight.')
 
         if drop_night_temp:
-            datapoints.append(SetpointDto(
-                timestamp=heat_drop_start, setpoint=self.temp_day, setpoint_type=SetpointDto.SetpointType.DROP))
+            heating_schedule.add_setpoint(
+                SetpointDto(
+                    timestamp=heat_drop_start,
+                    setpoint=self.temp_day,
+                    setpoint_type=SetpointDto.SetpointType.DROP,
+                )
+            )
 
             for i in range(self.fade_steps):
-                datapoints.append(SetpointDto(
-                    timestamp=heat_drop_start + ((i+1) * step_interval),
-                    setpoint=datapoints[-1].setpoint - step_temp,
-                    setpoint_type=SetpointDto.SetpointType.DROP
-                ))
+                heating_schedule.add_setpoint(
+                    SetpointDto(
+                        timestamp=heat_drop_start + ((i + 1) * step_interval),
+                        setpoint=heating_schedule.get_last_setpoint().setpoint
+                        - step_temp,
+                        setpoint_type=SetpointDto.SetpointType.DROP,
+                    )
+                )
 
         fade_offset = self.fade_period / 4
         step_temp = self.buffer_temp_added / self.fade_steps
@@ -314,15 +490,10 @@ class HeatingService:
 
         # always drop buffer
         if buffer_bounds is None or buffer_bounds.end is None:
-            # find latest RAISE setpoint
-            buffer_drop_start = sorted(
-                [
-                    d
-                    for d in datapoints
-                    if d.setpoint_type == SetpointDto.SetpointType.RAISE
-                ],
-                key=lambda x: x.timestamp,
-            )[-1].timestamp
+            most_recent_raise = heating_schedule.get_most_recent_setpoint_of_type(
+                SetpointDto.SetpointType.RAISE
+            )
+            buffer_drop_start = most_recent_raise.timestamp
         else:
             buffer_drop_start = buffer_bounds.end - fade_offset
 
@@ -344,40 +515,39 @@ class HeatingService:
                     f'Buffering will occur between {buffer_raise_start} and {buffer_drop_start}.')
 
                 for i in range(self.fade_steps):
-                    datapoints.append(SetpointDto(
-                        timestamp=buffer_raise_start + ((i+1) * step_interval),
-                        setpoint=self.temp_day + ((i+1) * step_temp),
-                        setpoint_type=SetpointDto.SetpointType.RAISE_BUFFER
-                    ))
+                    heating_schedule.add_setpoint(
+                        SetpointDto(
+                            timestamp=buffer_raise_start + ((i + 1) * step_interval),
+                            setpoint=self.temp_day + ((i + 1) * step_temp),
+                            setpoint_type=SetpointDto.SetpointType.RAISE_BUFFER,
+                        )
+                    )
 
         for i in range(self.fade_steps):
-            datapoints.append(SetpointDto(
-                timestamp=buffer_drop_start + ((i+1) * step_interval),
-                setpoint=self.temp_day +
-                self.buffer_temp_added - ((i+1) * step_temp),
-                setpoint_type=SetpointDto.SetpointType.DROP
-            ))
+            heating_schedule.add_setpoint(
+                SetpointDto(
+                    timestamp=buffer_drop_start + ((i + 1) * step_interval),
+                    setpoint=self.temp_day
+                    + self.buffer_temp_added
+                    - ((i + 1) * step_temp),
+                    setpoint_type=SetpointDto.SetpointType.DROP,
+                )
+            )
 
-        self.heating_plan = datapoints
+        for setpoint in await self.plan_price_exclusions():
+            heating_schedule.add_setpoint(setpoint)
 
-    def get_current_setpoint(self):
-        heating_plan = sorted(self.heating_plan, key=lambda sp: sp.timestamp)
-
-        now = datetime.datetime.now(tz=pytz.timezone('Europe/Brussels'))
-        past_setpoints = [sp for sp in heating_plan if sp.timestamp <= now]
-
-        if len(past_setpoints) > 0:
-            return past_setpoints[-1]
-        else:
-            return None
+        self.heating_plan = heating_schedule
 
     async def evaluate(self):
-        if len(self.heating_plan) == 0:
+        if self.heating_plan.is_empty():
             # no plan, then make one
             self.app.log.debug("No heating setpoints in plan.")
             await self.plan()
 
-        current_setpoint = self.get_current_setpoint()
+        current_state = self.heating_plan.get_current_state()
+        current_setpoint = self.heating_plan.get_current_setpoint()
+
         if current_setpoint is None:
             # no setpoint -> nothing to do
             return
@@ -391,6 +561,16 @@ class HeatingService:
 
         if state_setpoint is None:
             state_setpoint = HeatingSetpoint('zone1', heatpump_setpoint)
+
+        if current_state.setpoint_type == SetpointDto.SetpointType.STOP:
+            self.app.log.debug("Heating is in STOP state now.")
+            if not state_setpoint.equals(current_state.setpoint):
+                await self.app.clients.ecodan.set_heating_target_temp(
+                    current_state.setpoint
+                )
+                state_setpoint.setpoint = current_state.setpoint
+                await state_setpoint.save()
+            return
 
         if not state_setpoint.equals(current_setpoint.setpoint):
             if current_setpoint.setpoint_type == SetpointDto.SetpointType.RAISE_BUFFER:
@@ -484,11 +664,11 @@ class HeatingService:
                         f'Detected heatpump in idle state since {self.in_idle_state_since}, dropping temperature '
                         f'to {new_setpoint}.')
 
-                    self.heating_plan.append(
+                    self.heating_plan.add_setpoint(
                         SetpointDto(
                             timestamp=now,
                             setpoint=new_setpoint,
-                            setpoint_type=SetpointDto.SetpointType.DROP
+                            setpoint_type=SetpointDto.SetpointType.DROP,
                         )
                     )
         else:

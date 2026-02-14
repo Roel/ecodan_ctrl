@@ -16,6 +16,7 @@
 
 from dataclasses import dataclass
 import datetime
+from typing import Optional
 
 
 @dataclass
@@ -42,17 +43,19 @@ class TimePeriodStatsDto:
     q50: float
     q75: float
     stddev: float
+    sum: Optional[float] = None
 
     @staticmethod
     def from_json(json):
         return TimePeriodStatsDto(
-            start=datetime.datetime.fromisoformat(json['start']),
-            end=datetime.datetime.fromisoformat(json['end']),
-            unit=json['unit'],
-            q25=json['q25'],
-            q50=json['q50'],
-            q75=json['q75'],
-            stddev=json['stddev']
+            start=datetime.datetime.fromisoformat(json["start"]),
+            end=datetime.datetime.fromisoformat(json["end"]),
+            unit=json["unit"],
+            q25=json["q25"],
+            q50=json["q50"],
+            q75=json["q75"],
+            stddev=json["stddev"],
+            sum=json.get("sum", None),
         )
 
 

@@ -25,7 +25,7 @@ class HabClient:
         self.app = app
         self.base_url = base_url
 
-        self.client = httpx.AsyncClient()
+        self.client = httpx.AsyncClient(timeout=30)
         self.client.auth = (username, password)
 
     async def shutdown(self):
@@ -81,3 +81,31 @@ class HabClient:
 
         if r.status_code == httpx.codes.OK:
             return TimePeriodStatsDto.from_json(r.json())
+
+    async def get_simulated_price_baseline(self, start, end):
+        data = {
+            "data": [
+                {"timestamp": start.isoformat(), "net_power": 750},
+                {"timestamp": end.isoformat(), "net_power": 750},
+            ]
+        }
+
+        r = await self.client.post(f"{self.base_url}/price/simulate/total", json=data)
+
+        if r.status_code == httpx.codes.OK:
+            return TimePeriodStatsDto.from_json(r.json())
+
+    async def get_simulated_price_detail(self, start, end):
+        data = {
+            "data": [
+                {"timestamp": start.isoformat(), "net_power": 750},
+                {"timestamp": end.isoformat(), "net_power": 750},
+            ]
+        }
+
+        r = await self.client.post(
+            f"{self.base_url}/price/simulate/total/detail", json=data
+        )
+
+        if r.status_code == httpx.codes.OK:
+            return [TimeDataDto.from_json(i) for i in r.json()]
