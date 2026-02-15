@@ -93,6 +93,25 @@ class HeatingSchedule:
         else:
             return SetpointDto(now, None, SetpointDto.SetpointType.RESUME)
 
+    def calculate_resume_setpoints(self, current_setpoint):
+        setpoint = current_setpoint
+
+        for sp in self.__chrono():
+            if (
+                sp.setpoint_type == SetpointDto.SetpointType.RAISE
+                and sp.setpoint > setpoint
+            ):
+                setpoint = sp.setpoint
+
+            if (
+                sp.setpoint_type == SetpointDto.SetpointType.DROP
+                and sp.setpoint < setpoint
+            ):
+                setpoint = sp.setpoint
+
+            if sp.setpoint_type == SetpointDto.SetpointType.RESUME:
+                sp.setpoint = setpoint
+
     def __chrono(self):
         return sorted(self.setpoints, key=lambda sp: sp.timestamp)
 
@@ -263,6 +282,9 @@ class HeatingService:
             baseline_price = await self.app.clients.hab.get_simulated_price_baseline(
                 today_start - self.price_pause_baseline_period, today_end
             )
+
+        if baseline_price is None or simulated_price is None:
+            return []
 
         cluster_set = ClusterSet(
             max_count=self.price_pause_max_count,
@@ -537,6 +559,7 @@ class HeatingService:
         for setpoint in await self.plan_price_exclusions():
             heating_schedule.add_setpoint(setpoint)
 
+        heating_schedule.calculate_resume_setpoints(heatpump_setpoint.heating)
         self.heating_plan = heating_schedule
 
     async def evaluate(self):
@@ -564,6 +587,16 @@ class HeatingService:
 
         if current_state.setpoint_type == SetpointDto.SetpointType.STOP:
             self.app.log.debug("Heating is in STOP state now.")
+            if not state_setpoint.equals(current_state.setpoint):
+                await self.app.clients.ecodan.set_heating_target_temp(
+                    current_state.setpoint
+                )
+                state_setpoint.setpoint = current_state.setpoint
+                await state_setpoint.save()
+            return
+
+        if current_state.setpoint_type == SetpointDto.SetpointType.RESUME:
+            self.app.log.debug("Resuming heating.")
             if not state_setpoint.equals(current_state.setpoint):
                 await self.app.clients.ecodan.set_heating_target_temp(
                     current_state.setpoint
