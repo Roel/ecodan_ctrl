@@ -595,7 +595,10 @@ class HeatingService:
                 await state_setpoint.save()
             return
 
-        if current_state.setpoint_type == SetpointDto.SetpointType.RESUME:
+        if (
+            current_state.setpoint_type == SetpointDto.SetpointType.RESUME
+            and current_state.setpoint is not None
+        ):
             self.app.log.debug("Resuming heating.")
             if not state_setpoint.equals(current_state.setpoint):
                 await self.app.clients.ecodan.set_heating_target_temp(
