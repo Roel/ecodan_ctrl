@@ -606,7 +606,6 @@ class HeatingService:
                 )
                 state_setpoint.setpoint = current_state.setpoint
                 await state_setpoint.save()
-            return
 
         if not state_setpoint.equals(current_setpoint.setpoint):
             if current_setpoint.setpoint_type == SetpointDto.SetpointType.RAISE_BUFFER:
