@@ -586,8 +586,8 @@ class HeatingService:
             state_setpoint = HeatingSetpoint('zone1', heatpump_setpoint)
 
         if current_state.setpoint_type == SetpointDto.SetpointType.STOP:
-            self.app.log.debug("Heating is in STOP state now.")
             if not state_setpoint.equals(current_state.setpoint):
+                self.app.log.debug("Stopping heating.")
                 await self.app.clients.ecodan.set_heating_target_temp(
                     current_state.setpoint
                 )
@@ -599,8 +599,8 @@ class HeatingService:
             current_state.setpoint_type == SetpointDto.SetpointType.RESUME
             and current_state.setpoint is not None
         ):
-            self.app.log.debug("Resuming heating.")
             if not state_setpoint.equals(current_state.setpoint):
+                self.app.log.debug("Resuming heating.")
                 await self.app.clients.ecodan.set_heating_target_temp(
                     current_state.setpoint
                 )
