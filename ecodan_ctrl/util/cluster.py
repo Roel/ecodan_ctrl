@@ -41,6 +41,9 @@ class Cluster:
         return self.__chrono()[-1].timestamp
 
     def is_inside(self, timestamp):
+        if self.get_start() is None or self.get_end() is None:
+            return False
+
         return self.get_start() <= timestamp <= self.get_end()
 
     def add_datapoint(self, timedata):
@@ -98,6 +101,8 @@ class ClusterSet:
             added = cluster.add_datapoint(timedata)
             if added:
                 return True
+            else:
+                self.clusters.remove(cluster)
 
         return False
 
