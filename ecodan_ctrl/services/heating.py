@@ -612,7 +612,9 @@ class HeatingService:
                 else:
                     self.app.log.debug("Current setpoint is of type RAISE, let's await that.")
 
-        if not state_setpoint.equals(current_setpoint.setpoint):
+        if state_setpoint.setpoint is None or not state_setpoint.equals(
+            current_setpoint.setpoint
+        ):
             if current_setpoint.setpoint_type == SetpointDto.SetpointType.RAISE_BUFFER:
                 if not await self.can_start_buffer():
                     return
