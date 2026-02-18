@@ -116,7 +116,7 @@ class HeatingSchedule:
         return sorted(self.setpoints, key=lambda sp: sp.timestamp)
 
     def __str__(self):
-        return f'<services.heating.HeatingSchedule [{", ".join(sp.__str__() for sp in self.__chrono())}]>'
+        return f'<services.heating.HeatingSchedule [\n  {", \n  ".join(sp.__str__() for sp in self.__chrono())}\n]>'
 
 
 class HeatingService:
@@ -559,7 +559,8 @@ class HeatingService:
         for setpoint in await self.plan_price_exclusions():
             heating_schedule.add_setpoint(setpoint)
 
-        heating_schedule.calculate_resume_setpoints(heatpump_setpoint.heating)
+        heating_schedule.calculate_resume_setpoints(temp_night)
+        print(heating_schedule)
         self.heating_plan = heating_schedule
 
     async def evaluate(self):
@@ -601,11 +602,15 @@ class HeatingService:
         ):
             if not state_setpoint.equals(current_state.setpoint):
                 self.app.log.debug("Resuming heating.")
-                await self.app.clients.ecodan.set_heating_target_temp(
-                    current_state.setpoint
-                )
-                state_setpoint.setpoint = current_state.setpoint
-                await state_setpoint.save()
+                if current_setpoint.setpoint_type != SetpointDto.SetpointType.RAISE:
+                    await self.app.clients.ecodan.set_heating_target_temp(
+                        current_state.setpoint
+                    )
+                    current_state.setpoint = None # only resume once
+                    state_setpoint.setpoint = current_state.setpoint
+                    await state_setpoint.save()
+                else:
+                    self.app.log.debug("Current setpoint is of type RAISE, let's await that.")
 
         if not state_setpoint.equals(current_setpoint.setpoint):
             if current_setpoint.setpoint_type == SetpointDto.SetpointType.RAISE_BUFFER:
