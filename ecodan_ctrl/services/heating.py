@@ -572,10 +572,6 @@ class HeatingService:
         current_state = self.heating_plan.get_current_state()
         current_setpoint = self.heating_plan.get_current_setpoint()
 
-        if current_setpoint is None:
-            # no setpoint -> nothing to do
-            return
-
         state_setpoint, heatpump_setpoint = await asyncio.gather(
             HeatingSetpoint.from_zone('zone1'),
             self.app.clients.hab.get_setpoint()
@@ -606,9 +602,9 @@ class HeatingService:
                     await self.app.clients.ecodan.set_heating_target_temp(
                         current_state.setpoint
                     )
-                    current_state.setpoint = None # only resume once
                     state_setpoint.setpoint = current_state.setpoint
                     await state_setpoint.save()
+                    current_state.setpoint = None # only resume once
                 else:
                     self.app.log.debug("Current setpoint is of type RAISE, let's await that.")
 
