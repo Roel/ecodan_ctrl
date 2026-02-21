@@ -598,7 +598,10 @@ class HeatingService:
         ):
             if not state_setpoint.equals(current_state.setpoint):
                 self.app.log.debug("Resuming heating.")
-                if current_setpoint.setpoint_type != SetpointDto.SetpointType.RAISE:
+                if (
+                    current_setpoint is None
+                    or current_setpoint.setpoint_type != SetpointDto.SetpointType.RAISE
+                ):
                     await self.app.clients.ecodan.set_heating_target_temp(
                         current_state.setpoint
                     )
@@ -608,8 +611,9 @@ class HeatingService:
                 else:
                     self.app.log.debug("Current setpoint is of type RAISE, let's await that.")
 
-        if state_setpoint.setpoint is None or not state_setpoint.equals(
-            current_setpoint.setpoint
+        if current_setpoint is not None and (
+            state_setpoint.setpoint is None
+            or not state_setpoint.equals(current_setpoint.setpoint)
         ):
             if current_setpoint.setpoint_type == SetpointDto.SetpointType.RAISE_BUFFER:
                 if not await self.can_start_buffer():
@@ -632,16 +636,6 @@ class HeatingService:
                     ),
                     self.app.clients.hab.get_current_net_power(),
                 )
-
-                if heatpump_state.defrost_status != "Normal":
-                    # in defrost state, wait
-                    self.app.log.debug('We\'re in defrost state, wait before raising setpoint.')
-                    return
-
-                if heatpump_state.operating_mode in ("Hot water", "Legionella"):
-                    # running DHW, wait
-                    self.app.log.debug('We\'re in DHW mode, wait before raising setpoint.')
-                    return
 
                 if (
                     heatpump_state.operating_mode == "Heating"
