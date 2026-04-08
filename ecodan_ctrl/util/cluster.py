@@ -49,7 +49,7 @@ class Cluster:
     def add_datapoint(self, timedata):
         ts = timedata.timestamp
 
-        if self.is_empty() and self.cluster_set.matches_interval(ts, ts, self):
+        if self.is_empty() and self.cluster_set.matches_interval(ts, ts, self, False):
             self.data.append(timedata)
             return True
         elif self.is_empty():
@@ -106,15 +106,20 @@ class ClusterSet:
 
         return False
 
-    def matches_interval(self, start, end, excluding_cluster):
+    def matches_interval(self, start, end, excluding_cluster, check_outer_bounds=True):
         for c in self.clusters:
             if c == excluding_cluster:
                 continue
 
-            if c.is_inside(end + self.min_interval):
+            max_end = end + self.min_interval
+            min_start = start - self.min_interval
+
+            if c.is_inside(max_end) or (max_end > c.get_end() and check_outer_bounds):
                 return False
 
-            if c.is_inside(start - self.min_interval):
+            if c.is_inside(min_start) or (
+                min_start < c.get_start() and check_outer_bounds
+            ):
                 return False
 
         return True
