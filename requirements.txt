@@ -16,11 +16,11 @@ blinker==1.9.0
     # via
     #   flask
     #   quart
-certifi==2026.2.25
+certifi==2026.4.22
     # via
     #   httpcore
     #   httpx
-click==8.3.2
+click==8.3.3
     # via
     #   flask
     #   quart
@@ -45,7 +45,7 @@ hypercorn==0.18.0
     #   quart
 hyperframe==6.1.0
     # via h2
-idna==3.11
+idna==3.14
     # via
     #   anyio
     #   httpx
@@ -65,7 +65,7 @@ markupsafe==3.0.3
     #   werkzeug
 priority==2.0.0
     # via hypercorn
-pytz==2026.1.post1
+pytz==2026.2
     # via -r requirements.in
 quart==0.20.0
     # via
