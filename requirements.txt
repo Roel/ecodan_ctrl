@@ -16,11 +16,11 @@ blinker==1.9.0
     # via
     #   flask
     #   quart
-certifi==2026.4.22
+certifi==2026.5.20
     # via
     #   httpcore
     #   httpx
-click==8.3.3
+click==8.4.1
     # via
     #   flask
     #   quart
@@ -45,7 +45,7 @@ hypercorn==0.18.0
     #   quart
 hyperframe==6.1.0
     # via h2
-idna==3.14
+idna==3.18
     # via
     #   anyio
     #   httpx
