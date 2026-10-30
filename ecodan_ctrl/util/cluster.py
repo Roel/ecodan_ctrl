@@ -111,15 +111,17 @@ class ClusterSet:
             if c == excluding_cluster:
                 continue
 
-            max_end = end + self.min_interval
-            min_start = start - self.min_interval
+            max_end = end + self.min_interval  # buffer after proposed end
+            min_start = start - self.min_interval  # buffer before proposed start
 
-            if c.is_inside(max_end) or (max_end > c.get_end() and check_outer_bounds):
+            # Check if the OTHER cluster is too close:
+            # Does it fall within the forbidden buffer zones?
+            if c.get_end() > min_start and c.get_end() < start:
+                # Other cluster ends in the pre-buffer (too close before)
                 return False
 
-            if c.is_inside(min_start) or (
-                min_start < c.get_start() and check_outer_bounds
-            ):
+            if c.get_start() > end and c.get_start() < max_end:
+                # Other cluster starts in the post-buffer (too close after)
                 return False
 
         return True
