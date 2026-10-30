@@ -596,20 +596,22 @@ class HeatingService:
             current_state.setpoint_type == SetpointDto.SetpointType.RESUME
             and current_state.setpoint is not None
         ):
-            if not state_setpoint.equals(current_state.setpoint):
-                self.app.log.debug("Resuming heating.")
-                if (
-                    current_setpoint is None
-                    or current_setpoint.setpoint_type != SetpointDto.SetpointType.RAISE
-                ):
-                    await self.app.clients.ecodan.set_heating_target_temp(
-                        current_state.setpoint
-                    )
-                    state_setpoint.setpoint = current_state.setpoint
-                    await state_setpoint.save()
-                    current_state.setpoint = None # only resume once
-                else:
-                    self.app.log.debug("Current setpoint is of type RAISE, let's await that.")
+            # Only resume if there's NO pending setpoint change (RAISE/DROP/RAISE_BUFFER)
+            if current_setpoint is None or current_setpoint.timestamp <= current_state.timestamp:
+                if not state_setpoint.equals(current_state.setpoint):
+                    self.app.log.debug("Resuming heating.")
+                    if (
+                        current_setpoint is None
+                        or current_setpoint.setpoint_type != SetpointDto.SetpointType.RAISE
+                    ):
+                        await self.app.clients.ecodan.set_heating_target_temp(
+                            current_state.setpoint
+                        )
+                        state_setpoint.setpoint = current_state.setpoint
+                        await state_setpoint.save()
+                        current_state.setpoint = None # only resume once
+                    else:
+                        self.app.log.debug("Current setpoint is of type RAISE, let's await that.")
 
         if current_setpoint is not None and (
             state_setpoint.setpoint is None
