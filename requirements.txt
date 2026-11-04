@@ -4,11 +4,12 @@
 #
 #    pip-compile --cert=None --client-cert=None --index-url=None --pip-args=None requirements.in
 #
+
 aiofiles==25.1.0
     # via quart
 aiosqlite==0.22.1
     # via -r requirements.in
-anyio==4.15.1
+anyio==4.16.0
     # via httpx
 apscheduler==3.11.3
     # via -r requirements.in
@@ -16,7 +17,7 @@ blinker==1.9.0
     # via
     #   flask
     #   quart
-certifi==2026.10.19
+certifi==2026.10.23
     # via
     #   httpcore
     #   httpx
@@ -65,7 +66,7 @@ markupsafe==3.0.4
     #   werkzeug
 priority==2.0.0
     # via hypercorn
-pytz==2026.5
+pytz==2026.6
     # via -r requirements.in
 quart==0.23.1
     # via
@@ -75,7 +76,7 @@ quart-auth==0.12.0
     # via -r requirements.in
 typing-extensions==4.16.0
     # via anyio
-tzlocal==5.4.4
+tzlocal==5.4.5
     # via apscheduler
 werkzeug==3.1.9
     # via
