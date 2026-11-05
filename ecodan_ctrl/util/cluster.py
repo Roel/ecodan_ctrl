@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import datetime
 
 class Cluster:
     def __init__(self, cluster_set, max_size):
@@ -35,10 +36,18 @@ class Cluster:
         return self.__chrono()[0].timestamp
 
     def get_end(self):
+        # timestamp of the last datapoint
         if self.is_empty():
             return None
 
         return self.__chrono()[-1].timestamp
+
+    def get_real_end(self):
+        # end of the last heating slot
+        if self.get_end() is None:
+            return None
+
+        return self.get_end() + self.cluster_set.slot
 
     def is_inside(self, timestamp):
         if self.get_start() is None or self.get_end() is None:
@@ -48,8 +57,9 @@ class Cluster:
 
     def add_datapoint(self, timedata):
         ts = timedata.timestamp
+        slot = self.cluster_set.slot
 
-        if self.is_empty() and self.cluster_set.matches_interval(ts, ts, self, False):
+        if self.is_empty() and self.cluster_set.matches_interval(ts, ts, self):
             self.data.append(timedata)
             return True
         elif self.is_empty():
@@ -59,17 +69,19 @@ class Cluster:
             self.data.append(timedata)
             return True
 
+        # extending backwards: real span runs from ts to the current real end
         if (
             ts < self.get_start()
-            and self.get_end() - ts <= self.max_size
+            and self.get_real_end() - ts <= self.max_size
             and self.cluster_set.matches_interval(ts, self.get_end(), self)
         ):
             self.data.append(timedata)
             return True
 
+        # extending forwards: real span runs from the current start to ts plus one slot
         if (
             ts > self.get_end()
-            and (ts - self.get_start()) <= self.max_size
+            and (ts + slot - self.get_start()) <= self.max_size
             and self.cluster_set.matches_interval(self.get_start(), ts, self)
         ):
             self.data.append(timedata)
@@ -79,10 +91,18 @@ class Cluster:
 
 
 class ClusterSet:
-    def __init__(self, max_count, max_size, min_interval):
+
+    def __init__(
+        self,
+        max_count,
+        max_size,
+        min_interval,
+        slot=datetime.timedelta(minutes=15),
+    ):
         self.max_count = max_count
         self.max_size = max_size
         self.min_interval = min_interval
+        self.slot = slot
 
         self.clusters = []
 
@@ -106,22 +126,27 @@ class ClusterSet:
 
         return False
 
-    def matches_interval(self, start, end, excluding_cluster, check_outer_bounds=True):
+    def matches_interval(self, start, end, excluding_cluster):
+        # start/end are datapoint timestamps; the proposed period runs until end + slot
+        new_start = start
+        new_end = end + self.slot
+
         for c in self.clusters:
-            if c == excluding_cluster:
+            if c is excluding_cluster or c.is_empty():
                 continue
 
-            max_end = end + self.min_interval  # buffer after proposed end
-            min_start = start - self.min_interval  # buffer before proposed start
+            other_start = c.get_start()
+            other_end = c.get_end() + self.slot
 
-            # Check if the OTHER cluster is too close:
-            # Does it fall within the forbidden buffer zones?
-            if c.get_end() > min_start and c.get_end() < start:
-                # Other cluster ends in the pre-buffer (too close before)
+            if new_end <= other_start:
+                gap = other_start - new_end
+            elif other_end <= new_start:
+                gap = new_start - other_end
+            else:
+                # the real periods overlap
                 return False
 
-            if c.get_start() > end and c.get_start() < max_end:
-                # Other cluster starts in the post-buffer (too close after)
+            if gap < self.min_interval:
                 return False
 
         return True
